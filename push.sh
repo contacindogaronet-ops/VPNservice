@@ -12,7 +12,7 @@ fi
 if [ ! -d ".git" ]; then
     git init
     git branch -M main
-    git remote add origin git@github.com:contacindogaronet-ops/indogaro-ai.git
+    git remote add origin git@github.com:contacindogaronet-ops/VPNservice.git
 fi
 
 git add .
