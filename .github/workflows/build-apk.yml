@@ -24,7 +24,9 @@ jobs:
 
     - name: 🛠️ Inisialisasi GoMobile
       run: |
+        go mod download
         go install golang.org/x/mobile/cmd/gomobile@latest
+        go install golang.org/x/mobile/cmd/gobind@latest
         gomobile init
 
     - name: 🧬 Kompilasi Golang ke Android Archive (.aar)
