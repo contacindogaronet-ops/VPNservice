@@ -1,6 +1,7 @@
 package core
 
 import (
+	_ "golang.org/x/mobile/bind" // 🔴 KUNCI ARSITEKTUR: Mengunci dependensi
 	"os"
 	"github.com/rs/zerolog/log"
 )
