@@ -4,7 +4,6 @@ android {
     namespace 'com.jargo.neuralvpn'
     compileSdk 34
 
-    // 🔴 KUNCI ARSITEKTUR 1: Penguncian Kriptografi Abadi
     signingConfigs {
         debug {
             storeFile file('debug.keystore')
@@ -19,8 +18,6 @@ android {
         minSdk 21
         targetSdk 34
         
-        // 🔴 KUNCI ARSITEKTUR 2: Auto-Increment Versioning
-        // Mengambil nomor urut mesin Cloud. Jika gagal, gunakan 1.
         versionCode (System.getenv("CI_RUN_NUMBER") ? System.getenv("CI_RUN_NUMBER").toInteger() : 1)
         versionName "3.0." + (System.getenv("CI_RUN_NUMBER") ?: "0")
     }
@@ -30,4 +27,10 @@ android {
             signingConfig signingConfigs.debug
         }
     }
+}
+
+// 🔴 KUNCI ARSITEKTUR YANG SEMPAT TERAMPUTASI:
+// Wajib ada agar Java bisa melihat otak Golang yang sudah dicetak!
+dependencies {
+    implementation files('libs/core.aar')
 }
