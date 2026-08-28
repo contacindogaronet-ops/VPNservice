@@ -74,7 +74,7 @@ public class MainActivity extends AppCompatActivity {
 
     private final ActivityResultLauncher<String> notificationPermissionLauncher =
             registerForActivityResult(new ActivityResultContracts.RequestPermission(), isGranted -> {
-                // Notifications allowed or denied
+                // Notifications permission handled
             });
 
     @Override
@@ -221,7 +221,7 @@ public class MainActivity extends AppCompatActivity {
             }
 
             String content = sb.toString();
-            int count = Core.loadRules(content);
+            long count = Core.loadRules(content);
             tvRulesStats.setText("Rules Loaded: " + count);
             tvRulesContent.setText(content);
             Toast.makeText(this, "Imported " + count + " rules successfully", Toast.LENGTH_SHORT).show();
