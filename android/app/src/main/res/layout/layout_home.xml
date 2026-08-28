@@ -127,22 +127,58 @@
             android:paddingStart="16dp"
             android:paddingEnd="16dp"
             android:textSize="13sp"
-            android:layout_marginBottom="10dp"
+            android:layout_marginBottom="14dp"
             android:singleLine="true" />
 
-        <EditText
-            android:id="@+id/et_dns_addr"
+        <!-- AI DNS Card Switch -->
+        <androidx.cardview.widget.CardView
             android:layout_width="match_parent"
-            android:layout_height="50dp"
-            android:background="#131B2E"
-            android:text="1.1.1.1"
-            android:textColorHint="#475569"
-            android:textColor="#F8FAFC"
-            android:paddingStart="16dp"
-            android:paddingEnd="16dp"
-            android:textSize="13sp"
-            android:layout_marginBottom="20dp"
-            android:singleLine="true" />
+            android:layout_height="wrap_content"
+            app:cardBackgroundColor="#131B2E"
+            app:cardCornerRadius="14dp"
+            app:cardElevation="0dp"
+            android:layout_marginBottom="20dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/switch_use_internal_dns"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Gunakan Proxy AI DNS (Tanpa DNS Luar)"
+                    android:textColor="#F8FAFC"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:checked="true" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="DNS 100% di-resolve oleh Termux/Proxy Anda sendiri."
+                    android:textColor="#10B981"
+                    android:textSize="10sp"
+                    android:layout_marginTop="2dp" />
+
+                <EditText
+                    android:id="@+id/et_dns_addr"
+                    android:layout_width="match_parent"
+                    android:layout_height="46dp"
+                    android:background="#090D16"
+                    android:hint="Custom DNS (e.g. 1.1.1.1)"
+                    android:textColorHint="#475569"
+                    android:textColor="#F8FAFC"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    android:textSize="12sp"
+                    android:layout_marginTop="10dp"
+                    android:singleLine="true"
+                    android:visibility="gone" />
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
 
         <!-- Connect Button -->
         <Button

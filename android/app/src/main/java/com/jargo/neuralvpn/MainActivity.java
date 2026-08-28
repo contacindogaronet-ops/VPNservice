@@ -47,6 +47,7 @@ public class MainActivity extends AppCompatActivity {
     private TextView tvStatusBadge;
     private EditText etSocksHost;
     private EditText etSocksPort;
+    private SwitchCompat switchUseInternalDns;
     private EditText etDnsAddr;
     private SwitchCompat switchBypassTermux;
     private EditText etCustomBypass;
@@ -123,6 +124,7 @@ public class MainActivity extends AppCompatActivity {
         tvStatusBadge = findViewById(R.id.tv_status_badge);
         etSocksHost = findViewById(R.id.et_socks_host);
         etSocksPort = findViewById(R.id.et_socks_port);
+        switchUseInternalDns = findViewById(R.id.switch_use_internal_dns);
         etDnsAddr = findViewById(R.id.et_dns_addr);
         switchBypassTermux = findViewById(R.id.switch_bypass_termux);
         etCustomBypass = findViewById(R.id.et_custom_bypass);
@@ -150,9 +152,11 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void loadSavedPreferences() {
-        // Default langsung diarahkan ke 127.0.0.3:2007
         etSocksHost.setText(prefs.getString("socks_host", "127.0.0.3"));
         etSocksPort.setText(prefs.getString("socks_port", "2007"));
+        boolean useInternal = prefs.getBoolean("use_internal_dns", true);
+        switchUseInternalDns.setChecked(useInternal);
+        etDnsAddr.setVisibility(useInternal ? View.GONE : View.VISIBLE);
         etDnsAddr.setText(prefs.getString("dns_addr", "1.1.1.1"));
         switchBypassTermux.setChecked(prefs.getBoolean("bypass_termux", true));
         etCustomBypass.setText(prefs.getString("custom_bypass", ""));
@@ -162,6 +166,7 @@ public class MainActivity extends AppCompatActivity {
         prefs.edit()
                 .putString("socks_host", etSocksHost.getText().toString().trim())
                 .putString("socks_port", etSocksPort.getText().toString().trim())
+                .putBoolean("use_internal_dns", switchUseInternalDns.isChecked())
                 .putString("dns_addr", etDnsAddr.getText().toString().trim())
                 .putBoolean("bypass_termux", switchBypassTermux.isChecked())
                 .putString("custom_bypass", etCustomBypass.getText().toString().trim())
@@ -186,20 +191,24 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setupActions() {
-        // Preset 127.0.0.3:2007
+        switchUseInternalDns.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            etDnsAddr.setVisibility(isChecked ? View.GONE : View.VISIBLE);
+        });
+
         btnPresetTermux2007.setOnClickListener(v -> {
             etSocksHost.setText("127.0.0.3");
             etSocksPort.setText("2007");
+            switchUseInternalDns.setChecked(true);
             switchBypassTermux.setChecked(true);
-            Toast.makeText(this, "Preset Termux 127.0.0.3:2007 applied", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "Preset 127.0.0.3:2007 + Proxy AI DNS Applied", Toast.LENGTH_SHORT).show();
         });
 
-        // Preset 127.0.0.1:10808
         btnPresetTermux10808.setOnClickListener(v -> {
             etSocksHost.setText("127.0.0.1");
             etSocksPort.setText("10808");
+            switchUseInternalDns.setChecked(true);
             switchBypassTermux.setChecked(true);
-            Toast.makeText(this, "Preset Termux 127.0.0.1:10808 applied", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "Preset 127.0.0.1:10808 Applied", Toast.LENGTH_SHORT).show();
         });
 
         btnToggleVpn.setOnClickListener(v -> {
@@ -259,6 +268,7 @@ public class MainActivity extends AppCompatActivity {
 
         String host = etSocksHost.getText().toString().trim();
         String portStr = etSocksPort.getText().toString().trim();
+        boolean useInternalDns = switchUseInternalDns.isChecked();
         String dns = etDnsAddr.getText().toString().trim();
         boolean bypassTermux = switchBypassTermux.isChecked();
         String customBypass = etCustomBypass.getText().toString().trim();
@@ -273,6 +283,7 @@ public class MainActivity extends AppCompatActivity {
         serviceIntent.putExtra(NeuralVpnService.EXTRA_SOCKS_HOST, host);
         serviceIntent.putExtra(NeuralVpnService.EXTRA_SOCKS_PORT, port);
         serviceIntent.putExtra(NeuralVpnService.EXTRA_DNS_ADDR, dns);
+        serviceIntent.putExtra(NeuralVpnService.EXTRA_USE_INTERNAL_DNS, useInternalDns);
         serviceIntent.putExtra(NeuralVpnService.EXTRA_BYPASS_TERMUX, bypassTermux);
         serviceIntent.putExtra(NeuralVpnService.EXTRA_CUSTOM_BYPASS, customBypass);
 

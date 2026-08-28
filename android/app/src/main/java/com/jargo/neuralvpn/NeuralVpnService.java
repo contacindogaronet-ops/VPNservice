@@ -25,6 +25,7 @@ public class NeuralVpnService extends VpnService implements SocketProtector {
     public static final String EXTRA_SOCKS_HOST = "EXTRA_SOCKS_HOST";
     public static final String EXTRA_SOCKS_PORT = "EXTRA_SOCKS_PORT";
     public static final String EXTRA_DNS_ADDR = "EXTRA_DNS_ADDR";
+    public static final String EXTRA_USE_INTERNAL_DNS = "EXTRA_USE_INTERNAL_DNS";
     public static final String EXTRA_BYPASS_TERMUX = "EXTRA_BYPASS_TERMUX";
     public static final String EXTRA_CUSTOM_BYPASS = "EXTRA_CUSTOM_BYPASS";
 
@@ -59,32 +60,33 @@ public class NeuralVpnService extends VpnService implements SocketProtector {
 
         if (ACTION_START.equals(action)) {
             String socksHost = intent.getStringExtra(EXTRA_SOCKS_HOST);
-            int socksPort = intent.getIntExtra(EXTRA_SOCKS_PORT, 10808);
+            int socksPort = intent.getIntExtra(EXTRA_SOCKS_PORT, 2007);
             String dnsAddr = intent.getStringExtra(EXTRA_DNS_ADDR);
+            boolean useInternalDns = intent.getBooleanExtra(EXTRA_USE_INTERNAL_DNS, true);
             boolean bypassTermux = intent.getBooleanExtra(EXTRA_BYPASS_TERMUX, true);
             String customBypass = intent.getStringExtra(EXTRA_CUSTOM_BYPASS);
 
             if (socksHost == null || socksHost.isEmpty()) {
-                socksHost = "127.0.0.1";
+                socksHost = "127.0.0.3";
             }
             if (dnsAddr == null || dnsAddr.isEmpty()) {
-                dnsAddr = "1.1.1.1";
+                dnsAddr = "10.10.0.2";
             }
 
             final String fullSocks = socksHost + ":" + socksPort;
             final String finalDns = dnsAddr;
 
-            startForegroundNotification();
+            startForegroundNotification(useInternalDns);
 
-            executor.execute(() -> launchEngine(fullSocks, finalDns, bypassTermux, customBypass));
+            executor.execute(() -> launchEngine(fullSocks, finalDns, useInternalDns, bypassTermux, customBypass));
         }
 
         return START_STICKY;
     }
 
-    private synchronized void launchEngine(String socksAddr, String dnsAddr, boolean bypassTermux, String customBypass) {
+    private synchronized void launchEngine(String socksAddr, String dnsAddr, boolean useInternalDns, boolean bypassTermux, String customBypass) {
         if (vpnInterface != null) {
-            Core.addLog("WARN", "Tunnel interface already established.");
+            Core.addLog("WARN", "Tunnel interface already active.");
             return;
         }
 
@@ -94,15 +96,21 @@ public class NeuralVpnService extends VpnService implements SocketProtector {
                     .setMtu(1500)
                     .addAddress("10.10.0.2", 24)
                     .addRoute("0.0.0.0", 0)
-                    .addDnsServer(dnsAddr)
+                    .addDnsServer(useInternalDns ? "10.10.0.2" : dnsAddr)
                     .setBlocking(true);
 
-            // Bypass Termux
+            // Bypass aplikasi VPN sendiri
+            try {
+                builder.addDisallowedApplication(getPackageName());
+            } catch (PackageManager.NameNotFoundException ignored) {}
+
+            // Auto-Bypass Termux & Injector Tunneling
             if (bypassTermux) {
                 PackageManager pm = getPackageManager();
                 List<ApplicationInfo> installedApps = pm.getInstalledApplications(PackageManager.GET_META_DATA);
                 for (ApplicationInfo app : installedApps) {
-                    if (app.packageName.toLowerCase().contains("termux")) {
+                    String pkg = app.packageName.toLowerCase();
+                    if (pkg.contains("termux") || pkg.contains("injector") || pkg.contains("httpcustom") || pkg.contains("netmod") || pkg.contains("v2ray")) {
                         try {
                             builder.addDisallowedApplication(app.packageName);
                             Core.addLog("INFO", "Anti-Loop Bypassed: " + app.packageName);
@@ -111,7 +119,7 @@ public class NeuralVpnService extends VpnService implements SocketProtector {
                 }
             }
 
-            // Bypass aplikasi kustom
+            // Bypass package kustom
             if (customBypass != null && !customBypass.trim().isEmpty()) {
                 String[] extraPackages = customBypass.split("[,;\\n]+");
                 for (String extraPkg : extraPackages) {
@@ -137,7 +145,7 @@ public class NeuralVpnService extends VpnService implements SocketProtector {
             int fd = vpnInterface.detachFd();
             Core.addLog("INFO", "Native TUN bound on FD " + fd + ". Upstream: " + socksAddr);
 
-            boolean success = Core.startEngine(fd, socksAddr, dnsAddr);
+            boolean success = Core.startEngine(fd, socksAddr, dnsAddr, useInternalDns);
             if (!success) {
                 Core.addLog("ERROR", "Go Kernel start failed.");
                 shutdownVpn();
@@ -149,7 +157,7 @@ public class NeuralVpnService extends VpnService implements SocketProtector {
         }
     }
 
-    private void startForegroundNotification() {
+    private void startForegroundNotification(boolean internalDns) {
         NotificationManager manager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         if (manager == null) return;
 
@@ -174,9 +182,11 @@ public class NeuralVpnService extends VpnService implements SocketProtector {
                 this, 0, activityIntent, PendingIntent.FLAG_IMMUTABLE
         );
 
+        String desc = internalDns ? "Proxy Internal AI DNS Active" : "Custom DNS Active";
+
         Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle("Neural VPN Active (Anti-Loop)")
-                .setContentText("Local SOCKS5 Loopback Protected")
+                .setContentTitle("Neural VPN Active")
+                .setContentText(desc)
                 .setSmallIcon(android.R.drawable.ic_lock_lock)
                 .setContentIntent(activityPendingIntent)
                 .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Disconnect", stopPendingIntent)

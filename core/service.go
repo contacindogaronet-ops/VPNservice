@@ -26,24 +26,25 @@ type TCPSession struct {
 }
 
 type VpnEngine struct {
-	tunFd      int
-	tunFile    *os.File
-	socksAddr  string
-	dnsAddr    string
-	relay      *SOCKS5Relay
-	ctx        context.Context
-	cancel     context.CancelFunc
-	wg         sync.WaitGroup
-	running    atomic.Bool
-	writeMu    sync.Mutex
-	sessionMu  sync.RWMutex
-	tcpSession map[string]*TCPSession
+	tunFd          int
+	tunFile        *os.File
+	socksAddr      string
+	dnsAddr        string
+	useInternalDNS bool
+	relay          *SOCKS5Relay
+	ctx            context.Context
+	cancel         context.CancelFunc
+	wg             sync.WaitGroup
+	running        atomic.Bool
+	writeMu        sync.Mutex
+	sessionMu      sync.RWMutex
+	tcpSession     map[string]*TCPSession
 }
 
 var globalEngine *VpnEngine
 var engineMutex sync.Mutex
 
-func StartEngine(fd int, socksAddr string, dnsAddr string) bool {
+func StartEngine(fd int, socksAddr string, dnsAddr string, useInternalDNS bool) bool {
 	engineMutex.Lock()
 	defer engineMutex.Unlock()
 
@@ -54,13 +55,14 @@ func StartEngine(fd int, socksAddr string, dnsAddr string) bool {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	engine := &VpnEngine{
-		tunFd:      fd,
-		socksAddr:  socksAddr,
-		dnsAddr:    dnsAddr,
-		relay:      NewSOCKS5Relay(socksAddr, 10*time.Second),
-		ctx:        ctx,
-		cancel:     cancel,
-		tcpSession: make(map[string]*TCPSession),
+		tunFd:          fd,
+		socksAddr:      socksAddr,
+		dnsAddr:        dnsAddr,
+		useInternalDNS: useInternalDNS,
+		relay:          NewSOCKS5Relay(socksAddr, 8*time.Second),
+		ctx:            ctx,
+		cancel:         cancel,
+		tcpSession:     make(map[string]*TCPSession),
 	}
 
 	engine.tunFile = os.NewFile(uintptr(fd), "tun")
@@ -73,7 +75,11 @@ func StartEngine(fd int, socksAddr string, dnsAddr string) bool {
 	engine.running.Store(true)
 	globalEngine = engine
 
-	AddLog("INFO", fmt.Sprintf("Kernel active on FD %d. Upstream: %s, DNS: %s", fd, socksAddr, dnsAddr))
+	if useInternalDNS {
+		AddLog("INFO", fmt.Sprintf("Kernel Active: [Proxy AI DNS Mode Active - Zero External DNS] Upstream: %s", socksAddr))
+	} else {
+		AddLog("INFO", fmt.Sprintf("Kernel Active: [Custom DNS Mode: %s] Upstream: %s", dnsAddr, socksAddr))
+	}
 
 	engine.wg.Add(1)
 	go engine.readLoop()
@@ -107,7 +113,7 @@ func StopEngine() {
 
 	globalEngine.wg.Wait()
 	globalEngine = nil
-	AddLog("INFO", "VPN Kernel shutdown complete.")
+	AddLog("INFO", "VPN Kernel stopped completely.")
 }
 
 func IsRunning() bool {
@@ -128,7 +134,6 @@ func isUnroutableIP(ip net.IP) bool {
 	if ip == nil {
 		return true
 	}
-	// Jangan teruskan loopback (127.0.0.1), IP TUN kita (10.10.0.2), broadcast (255.255.255.255), atau multicast
 	if ip.IsLoopback() || ip.IsMulticast() || ip.IsUnspecified() {
 		return true
 	}
@@ -191,7 +196,7 @@ func (e *VpnEngine) readLoop() {
 			payload := packet[ihl+8 : ihl+int(udpLen)]
 
 			if dstPort == 53 {
-				go e.handleDNS(srcIP, dstIP, srcPort, payload)
+				e.handleDNS_ProxyInternal(srcIP, dstIP, srcPort, payload)
 			}
 
 		case 6: // TCP
@@ -211,37 +216,39 @@ func (e *VpnEngine) readLoop() {
 				payload = packet[ihl+dataOffset:]
 			}
 
+			// Reject DoT (Port 853) agar sistem langsung menggunakan DNS Proxy
+			if dstPort == 853 {
+				rstPkt := BuildTCPPacket(dstIP, srcIP, dstPort, srcPort, 0, seq+1, 0x14, nil)
+				e.writeToTun(rstPkt)
+				continue
+			}
+
 			e.handleTCP(srcIP, dstIP, srcPort, dstPort, seq, ack, flags, payload)
 		}
 	}
 }
 
-func (e *VpnEngine) handleDNS(clientIP, serverIP net.IP, clientPort uint16, dnsPayload []byte) {
-	conn, err := ProtectedListenUDP(e.ctx)
-	if err != nil {
-		return
-	}
-	defer conn.Close()
-
-	rAddr, err := net.ResolveUDPAddr("udp", e.dnsAddr+":53")
-	if err != nil {
+// handleDNS_ProxyInternal merespons DNS lokal tanpa pernah menghubungi DNS server luar (0ms).
+func (e *VpnEngine) handleDNS_ProxyInternal(clientIP, serverIP net.IP, clientPort uint16, dnsPayload []byte) {
+	dnsInfo, err := ParseDNSQuery(dnsPayload)
+	if err != nil || dnsInfo == nil || dnsInfo.QName == "" {
 		return
 	}
 
-	_ = conn.SetDeadline(time.Now().Add(3 * time.Second))
-	if _, err := conn.WriteTo(dnsPayload, rAddr); err != nil {
-		return
+	var responseData []byte
+
+	if dnsInfo.QType == 1 { // A Record (IPv4)
+		fakeIP := globalFakeDNS.GetOrAllocateFakeIP(dnsInfo.QName)
+		responseData = BuildDNSResponseA(dnsPayload, dnsInfo.ID, fakeIP)
+		AddLog("DNS", fmt.Sprintf("[Proxy AI DNS] Mapped %s -> %s", dnsInfo.QName, fakeIP.String()))
+	} else {
+		responseData = BuildDNSResponseEmpty(dnsPayload)
 	}
 
-	respBuf := make([]byte, 2048)
-	nr, _, err := conn.ReadFrom(respBuf)
-	if err != nil || nr == 0 {
-		return
+	if responseData != nil {
+		udpPkt := BuildUDPPacket(serverIP, clientIP, 53, clientPort, responseData)
+		e.writeToTun(udpPkt)
 	}
-
-	dnsResp := respBuf[:nr]
-	responsePkt := BuildUDPPacket(serverIP, clientIP, 53, clientPort, dnsResp)
-	e.writeToTun(responsePkt)
 }
 
 func (e *VpnEngine) handleTCP(srcIP, dstIP net.IP, srcPort, dstPort uint16, seq, ack uint32, flags byte, payload []byte) {
@@ -269,10 +276,16 @@ func (e *VpnEngine) handleTCP(srcIP, dstIP net.IP, srcPort, dstPort uint16, seq,
 		e.tcpSession[sessionKey] = sess
 		e.sessionMu.Unlock()
 
+		// Ambil nama Domain asli agar Proxy AI Termux me-resolve secara internal
+		targetHost := dstIP.String()
+		if domain, isFake := globalFakeDNS.GetDomainByFakeIP(dstIP); isFake {
+			targetHost = domain
+		}
+
 		go func() {
-			socksConn, err := e.relay.Dial(ctx, dstIP.String(), dstPort)
+			socksConn, err := e.relay.Dial(ctx, targetHost, dstPort)
 			if err != nil {
-				AddLog("ERROR", fmt.Sprintf("SOCKS5 Connect Failed: %v", err))
+				AddLog("WARN", fmt.Sprintf("Proxy Connect Failed (%s:%d): %v", targetHost, dstPort, err))
 				rstPkt := BuildTCPPacket(dstIP, srcIP, dstPort, srcPort, 0, seq+1, 0x14, nil)
 				e.writeToTun(rstPkt)
 				sess.close()
@@ -280,7 +293,7 @@ func (e *VpnEngine) handleTCP(srcIP, dstIP net.IP, srcPort, dstPort uint16, seq,
 			}
 
 			sess.socksConn = socksConn
-			AddLog("TCP", fmt.Sprintf("ESTABLISHED %s:%d -> %s:%d", srcIP, srcPort, dstIP, dstPort))
+			AddLog("TCP", fmt.Sprintf("ESTABLISHED -> %s:%d [AI DNS Resolved]", targetHost, dstPort))
 
 			// Kirim SYN-ACK kembali ke Android OS
 			synAckPkt := BuildTCPPacket(dstIP, srcIP, dstPort, srcPort, sess.serverSeq, sess.clientSeq, 0x12, nil)
