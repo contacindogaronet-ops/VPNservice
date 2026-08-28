@@ -48,7 +48,14 @@ jobs:
           mkdir -p android/app/libs
           gomobile bind -v -target=android -androidapi 26 -o android/app/libs/core.aar ./core
 
-      - name: Setup Gradle CLI (Tanpa Wrapper)
+      - name: Setup Gradle Properties
+        working-directory: android
+        run: |
+          touch gradle.properties
+          echo "android.useAndroidX=true" >> gradle.properties
+          echo "org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8" >> gradle.properties
+
+      - name: Setup Gradle CLI
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.6'
