@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:background="#0A0A0A">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="KUL NEURAL ENGINE"
+        android:textColor="#00FF00"
+        android:textSize="28sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="20dp" />
+
+    <TextView
+        android:id="@+id/statusText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="STATUS: MENUNGGU INSTRUKSI"
+        android:textColor="#FF0000"
+        android:textSize="16sp"
+        android:layout_marginBottom="50dp" />
+
+    <Button
+        android:id="@+id/connectBtn"
+        android:layout_width="220dp"
+        android:layout_height="60dp"
+        android:backgroundTint="#00FF00"
+        android:textColor="#000000"
+        android:textStyle="bold"
+        android:text="INITIATE CONNECTION" />
+</LinearLayout>
