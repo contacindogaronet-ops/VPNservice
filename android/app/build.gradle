@@ -11,6 +11,7 @@ android {
     }
 }
 dependencies {
-    // Penunjukan absolut ke memori biner Golang
-    implementation files('libs/core.aar')
+    // 🔴 ARSITEKTUR BERSIH:
+    // Tidak ada lagi pemanggilan file .aar. 
+    // Biner Golang dieksekusi langsung dari folder assets oleh Java.
 }
