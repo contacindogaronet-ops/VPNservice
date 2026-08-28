@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent">
+    
+    <TextView android:id="@+id/title" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_centerHorizontal="true" android:layout_marginTop="24dp" android:text="KUL NEURAL ENGINE" android:textColor="#FFFFFF" android:textSize="20sp" android:textStyle="bold" android:letterSpacing="0.1" />
+
+    <LinearLayout android:id="@+id/statusCard" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_below="@id/title" android:layout_margin="16dp" android:background="@drawable/bg_card" android:padding="24dp" android:orientation="vertical" android:gravity="center">
+        <TextView android:id="@+id/statusIcon" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="🔴" android:textSize="40sp" android:layout_marginBottom="8dp"/>
+        <TextView android:id="@+id/statusText" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="SYSTEM STANDBY" android:textColor="#888888" android:textSize="14sp" android:textStyle="bold" />
+    </LinearLayout>
+
+    <GridLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_below="@id/statusCard" android:layout_marginHorizontal="16dp" android:columnCount="2" android:rowCount="2">
+        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_columnWeight="1" android:layout_margin="8dp" android:background="@drawable/bg_card" android:orientation="vertical" android:padding="16dp" android:gravity="center">
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="CPU LOAD" android:textColor="#777777" android:textSize="10sp" android:textStyle="bold"/>
+            <TextView android:id="@+id/tvCpu" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="-- %" android:textColor="#00E676" android:textStyle="bold" android:layout_marginTop="4dp" android:textSize="16sp"/>
+        </LinearLayout>
+        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_columnWeight="1" android:layout_margin="8dp" android:background="@drawable/bg_card" android:orientation="vertical" android:padding="16dp" android:gravity="center">
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="MEMORY (RAM)" android:textColor="#777777" android:textSize="10sp" android:textStyle="bold"/>
+            <TextView android:id="@+id/tvRam" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="-- MB" android:textColor="#00E676" android:textStyle="bold" android:layout_marginTop="4dp" android:textSize="16sp"/>
+        </LinearLayout>
+        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_columnWeight="1" android:layout_margin="8dp" android:background="@drawable/bg_card" android:orientation="vertical" android:padding="16dp" android:gravity="center">
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="TEMPERATURE" android:textColor="#777777" android:textSize="10sp" android:textStyle="bold"/>
+            <TextView android:id="@+id/tvTemp" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="-- °C" android:textColor="#FF3D00" android:textStyle="bold" android:layout_marginTop="4dp" android:textSize="16sp"/>
+        </LinearLayout>
+        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_columnWeight="1" android:layout_margin="8dp" android:background="@drawable/bg_card" android:orientation="vertical" android:padding="16dp" android:gravity="center">
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="TX / RX (KB/s)" android:textColor="#777777" android:textSize="10sp" android:textStyle="bold"/>
+            <TextView android:id="@+id/tvNet" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="0 / 0" android:textColor="#00BBFF" android:textStyle="bold" android:layout_marginTop="4dp" android:textSize="16sp"/>
+        </LinearLayout>
+    </GridLayout>
+
+    <TextView android:id="@+id/connectBtn" android:layout_width="match_parent" android:layout_height="64dp" android:layout_centerInParent="true" android:layout_alignParentBottom="true" android:layout_marginBottom="110dp" android:layout_marginHorizontal="24dp" android:background="@drawable/bg_button" android:gravity="center" android:text="TAP TO IGNITE" android:textColor="#000000" android:textSize="16sp" android:textStyle="bold" />
+</RelativeLayout>
