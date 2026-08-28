@@ -9,16 +9,7 @@ android {
         versionCode 1
         versionName "1.0"
     }
-    
-    // 🔴 KUNCI ARSITEKTUR 1: Deklarasi Absolut Folder Aset
-    sourceSets {
-        main {
-            assets.srcDirs = ['src/main/assets']
-        }
-    }
-
-    // 🔴 KUNCI ARSITEKTUR 2: Larangan Kompresi Mutlak
-    androidResources {
-        noCompress 'core_engine'
-    }
+}
+dependencies {
+    implementation files('libs/core.aar')
 }
