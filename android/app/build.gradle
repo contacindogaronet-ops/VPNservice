@@ -11,6 +11,6 @@ android {
     }
 }
 dependencies {
-    // 🔴 INI KUNCI ARSITEKTUR: Membaca biner Golang (core.aar)
-    implementation fileTree(dir: 'libs', include: ['*.aar'])
+    // 🔴 KUNCI ARSITEKTUR: Penunjukan absolut ke biner, membypass pemindaian dinamis
+    implementation files('libs/core.aar')
 }
