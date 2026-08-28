@@ -37,11 +37,9 @@ public class NeuralVpnService extends VpnService implements SocketProtector {
     @Override
     public void onCreate() {
         super.onCreate();
-        // Bind Go runtime socket protection to VpnService.protect()
         Core.registerSocketProtector(this);
     }
 
-    // GoMobile SocketProtector Interface Callback
     @Override
     public boolean protect(long fd) {
         return protect((int) fd);
@@ -99,12 +97,7 @@ public class NeuralVpnService extends VpnService implements SocketProtector {
                     .addDnsServer(dnsAddr)
                     .setBlocking(true);
 
-            // 1. Bypass aplikasi ini sendiri dari interface VPN
-            try {
-                builder.addDisallowedApplication(getPackageName());
-            } catch (PackageManager.NameNotFoundException ignored) {}
-
-            // 2. Scan dan Bypass seluruh varian Termux yang terpasang di HP
+            // Bypass Termux
             if (bypassTermux) {
                 PackageManager pm = getPackageManager();
                 List<ApplicationInfo> installedApps = pm.getInstalledApplications(PackageManager.GET_META_DATA);
@@ -112,13 +105,13 @@ public class NeuralVpnService extends VpnService implements SocketProtector {
                     if (app.packageName.toLowerCase().contains("termux")) {
                         try {
                             builder.addDisallowedApplication(app.packageName);
-                            Core.addLog("INFO", "Anti-Loop Auto-Bypassed: " + app.packageName);
+                            Core.addLog("INFO", "Anti-Loop Bypassed: " + app.packageName);
                         } catch (PackageManager.NameNotFoundException ignored) {}
                     }
                 }
             }
 
-            // 3. Bypass package kustom
+            // Bypass aplikasi kustom
             if (customBypass != null && !customBypass.trim().isEmpty()) {
                 String[] extraPackages = customBypass.split("[,;\\n]+");
                 for (String extraPkg : extraPackages) {
@@ -142,7 +135,7 @@ public class NeuralVpnService extends VpnService implements SocketProtector {
             }
 
             int fd = vpnInterface.detachFd();
-            Core.addLog("INFO", "Native TUN bound on FD " + fd + ". Routing to SOCKS5 upstream: " + socksAddr);
+            Core.addLog("INFO", "Native TUN bound on FD " + fd + ". Upstream: " + socksAddr);
 
             boolean success = Core.startEngine(fd, socksAddr, dnsAddr);
             if (!success) {
@@ -183,7 +176,7 @@ public class NeuralVpnService extends VpnService implements SocketProtector {
 
         Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle("Neural VPN Active (Anti-Loop)")
-                .setContentText("Bidirectional TUN Virtual TCP/UDP Stack Active")
+                .setContentText("Local SOCKS5 Loopback Protected")
                 .setSmallIcon(android.R.drawable.ic_lock_lock)
                 .setContentIntent(activityPendingIntent)
                 .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Disconnect", stopPendingIntent)

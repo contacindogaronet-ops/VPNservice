@@ -48,7 +48,7 @@ func StartEngine(fd int, socksAddr string, dnsAddr string) bool {
 	defer engineMutex.Unlock()
 
 	if globalEngine != nil && globalEngine.running.Load() {
-		AddLog("WARN", "VPN Kernel already active.")
+		AddLog("WARN", "VPN Kernel is already running.")
 		return true
 	}
 
@@ -124,6 +124,20 @@ func (e *VpnEngine) writeToTun(packet []byte) {
 	}
 }
 
+func isUnroutableIP(ip net.IP) bool {
+	if ip == nil {
+		return true
+	}
+	// Jangan teruskan loopback (127.0.0.1), IP TUN kita (10.10.0.2), broadcast (255.255.255.255), atau multicast
+	if ip.IsLoopback() || ip.IsMulticast() || ip.IsUnspecified() {
+		return true
+	}
+	if ip.Equal(net.ParseIP("10.10.0.2")) || ip.Equal(net.ParseIP("255.255.255.255")) {
+		return true
+	}
+	return false
+}
+
 func (e *VpnEngine) readLoop() {
 	defer e.wg.Done()
 	buf := make([]byte, 65535)
@@ -156,6 +170,10 @@ func (e *VpnEngine) readLoop() {
 		protocol := packet[9]
 		srcIP := net.IP(packet[12:16])
 		dstIP := net.IP(packet[16:20])
+
+		if isUnroutableIP(dstIP) {
+			continue
+		}
 
 		switch protocol {
 		case 17: // UDP
@@ -235,7 +253,6 @@ func (e *VpnEngine) handleTCP(srcIP, dstIP net.IP, srcPort, dstPort uint16, seq,
 	isAck := (flags & 0x10) != 0
 
 	if isSyn {
-		// Start TCP Session
 		ctx, cancel := context.WithCancel(e.ctx)
 		sess := &TCPSession{
 			clientIP:   srcIP,
@@ -263,14 +280,13 @@ func (e *VpnEngine) handleTCP(srcIP, dstIP net.IP, srcPort, dstPort uint16, seq,
 			}
 
 			sess.socksConn = socksConn
-			AddLog("TCP", fmt.Sprintf("Tunnel ESTABLISHED: %s:%d -> %s:%d", srcIP, srcPort, dstIP, dstPort))
+			AddLog("TCP", fmt.Sprintf("ESTABLISHED %s:%d -> %s:%d", srcIP, srcPort, dstIP, dstPort))
 
-			// Reply SYN-ACK to Android OS
+			// Kirim SYN-ACK kembali ke Android OS
 			synAckPkt := BuildTCPPacket(dstIP, srcIP, dstPort, srcPort, sess.serverSeq, sess.clientSeq, 0x12, nil)
 			sess.serverSeq++
 			e.writeToTun(synAckPkt)
 
-			// Read response from SOCKS5 and push back to TUN
 			go sess.forwardDownstream(e)
 		}()
 		return
@@ -299,7 +315,6 @@ func (e *VpnEngine) handleTCP(srcIP, dstIP net.IP, srcPort, dstPort uint16, seq,
 		sess.clientSeq = seq + uint32(len(payload))
 		_, _ = sess.socksConn.Write(payload)
 
-		// Ack received payload
 		ackPkt := BuildTCPPacket(dstIP, srcIP, dstPort, srcPort, sess.serverSeq, sess.clientSeq, 0x10, nil)
 		e.writeToTun(ackPkt)
 	}
