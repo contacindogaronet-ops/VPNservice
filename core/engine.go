@@ -1,61 +1,95 @@
 package core
 
 import (
+	"encoding/binary"
 	"os"
 	"sync"
+
 	"github.com/rs/zerolog/log"
 )
 
-// Dual-Pool Architecture: Kita siapkan buffer besar untuk MTU Android
-var bufferPool = sync.Pool{
+// Arsitektur Dual-Pool: 
+// 1. Buffer raksasa untuk menangkap MTU IP mentah dari Android
+var tunPool = sync.Pool{
 	New: func() interface{} {
-		b := make([]byte, 65535) // Maksimal ukuran paket IP
+		b := make([]byte, 65535)
 		return &b
 	},
 }
 
-// 🔴 KUNCI ARSITEKTUR: Fungsi ini dipanggil langsung oleh Java
+// 2. Buffer 32KB untuk TCP Relay standar (Anti-Jitter) yang akan kita gunakan nanti
+var relayPool32 = sync.Pool{
+	New: func() interface{} {
+		b := make([]byte, 32*1024)
+		return &b
+	},
+}
+
 func StartEngine(fd int) {
-	log.Info().Msg("🔥 Engine KUL v2.0 Terinisialisasi (Pure Go Direct Memory)")
+	log.Info().Msg("🔥 Engine KUL v3.0: Layer 3 Interceptor Aktif!")
 	
-	// Mengambil alih pipa VPN Android langsung ke memori Golang
 	tun := os.NewFile(uintptr(fd), "tun")
 	defer tun.Close()
 
 	for {
-		bufPtr := bufferPool.Get().(*[]byte)
+		bufPtr := tunPool.Get().(*[]byte)
 		packet := *bufPtr
 
-		// Baca lalu lintas internet mentah dari OS
 		n, err := tun.Read(packet)
 		if err != nil {
-			log.Error().Err(err).Msg("Koneksi VPN Terputus oleh OS.")
-			bufferPool.Put(bufPtr)
+			log.Error().Err(err).Msg("Pipa TUN Terputus.")
+			tunPool.Put(bufPtr)
 			break
 		}
 
-		// Lempar ke mesin pembedah Lapis 3 (Berjalan asinkron agar tidak memblokir antrean)
 		go dissectPacket(packet[:n], bufPtr)
 	}
 }
 
-// dissectPacket akan membedah apakah ini TCP, UDP (DNS), dan melakukan routing
 func dissectPacket(packet []byte, originalBuf *[]byte) {
-	// Pastikan buffer selalu dikembalikan ke Pool setelah selesai diproses untuk mencegah Memory Leak
-	defer bufferPool.Put(originalBuf)
+	defer tunPool.Put(originalBuf)
 
 	if len(packet) < 20 {
-		return
+		return // Terlalu kecil untuk header IPv4
 	}
 
-	// Cek header IPv4
-	if packet[0]>>4 == 4 {
-		protocol := packet[9]
-		
-		if protocol == 6 {
-			// TODO: Bangun User-Space TCP Stack (tun2socks internal) di sini
-		} else if protocol == 17 {
-			// TODO: Bangun AI DNS Interceptor di sini
-		}
+	// 1. Ekstraksi Header IPv4
+	version := packet[0] >> 4
+	if version != 4 {
+		return // Abaikan IPv6 untuk saat ini
 	}
+
+	ihl := int(packet[0]&0x0F) * 4 // IP Header Length (Biasanya 20 byte)
+	protocol := packet[9]
+
+	// 2. Pemisahan Jalur (Bifurcation)
+	if protocol == 17 { // UDP
+		handleUDP(packet, ihl)
+	} else if protocol == 6 { // TCP
+		handleTCP(packet, ihl)
+	}
+}
+
+func handleUDP(packet []byte, iphLen int) {
+	if len(packet) < iphLen+8 {
+		return // Paket UDP korup
+	}
+
+	// Ekstraksi Port dari Header UDP
+	srcPort := binary.BigEndian.Uint16(packet[iphLen : iphLen+2])
+	dstPort := binary.BigEndian.Uint16(packet[iphLen+2 : iphLen+4])
+
+	if dstPort == 53 {
+		log.Info().Msgf("🎯 [DNS AI] Mencegat kueri DNS dari port internal %d", srcPort)
+		// TODO: Di sinilah Otak AI SINKHOLE Anda akan membaca payload domain
+		// dan membalas dengan IP 0.0.0.0 (Block) atau IP asli (Allow)
+	} else {
+		// UDP Umum (Game Online, QUIC, dll)
+		// log.Debug().Msgf("UDP Traffic: %d -> %d", srcPort, dstPort)
+	}
+}
+
+func handleTCP(packet []byte, iphLen int) {
+	// TCP State Machine akan diletakkan di sini.
+	// log.Debug().Msg("TCP Syn/Ack/Data Terdeteksi")
 }
