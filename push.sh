@@ -1,20 +1,18 @@
 #!/bin/bash
-# JARGO: Auto-Push CI/CD Pipeline (SSH Optimized)
+# JARGO: Auto-Push CI/CD Pipeline (Force-Asset Optimized)
 
 MSG=$1
 if [ -z "$MSG" ]; then
     echo "🔥 ERROR: Pesan commit tidak boleh kosong."
-    echo "Eksekusi: ./push.sh \"first commit: inisialisasi arsitektur neural vpn\""
     exit 1
 fi
 
-# Injeksi repositori jika belum terhubung
-if [ ! -d ".git" ]; then
-    git init
-    git branch -M main
-    git remote add origin git@github.com:contacindogaronet-ops/VPNservice.git
-fi
+# 1. PAKSA PENELANAN BINER: Abaikan semua aturan gitignore untuk folder aset
+git add -f android/app/src/main/assets/core_engine 2>/dev/null
 
+# 2. Telan sisa kode Java/XML/Gradle
 git add .
+
+# 3. Kunci dan Tembakkan
 git commit -m "$MSG"
 git push -u origin main
