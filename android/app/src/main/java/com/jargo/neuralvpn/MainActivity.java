@@ -5,7 +5,6 @@ import android.content.Intent;
 import android.graphics.Color;
 import android.net.VpnService;
 import android.os.Bundle;
-import android.view.View;
 import android.widget.TextView;
 
 public class MainActivity extends Activity {
@@ -25,7 +24,7 @@ public class MainActivity extends Activity {
             if (!isConnected) {
                 requestVpnPermission();
             } else {
-                // TODO: Logika pemutusan VPN (Disconnect) akan ditanam di sini
+                stopVpnEngine();
             }
         });
     }
@@ -51,17 +50,30 @@ public class MainActivity extends Activity {
 
     private void startVpnEngine() {
         Intent vpnIntent = new Intent(this, NeuralVpnService.class);
+        vpnIntent.setAction("START_VPN");
         startService(vpnIntent);
         
         isConnected = true;
-        
-        // Transformasi Visual (Dashboard Aktif)
         statusIcon.setText("🟢");
         statusText.setText("SECURE TUNNEL ACTIVE");
         statusText.setTextColor(Color.parseColor("#00E676"));
-        
         connectBtn.setBackgroundResource(R.drawable.bg_button_off);
         connectBtn.setText("DISCONNECT");
         connectBtn.setTextColor(Color.WHITE);
+    }
+
+    private void stopVpnEngine() {
+        // 🔴 KUNCI ARSITEKTUR: Mengirim sinyal pembunuhan ke Service
+        Intent vpnIntent = new Intent(this, NeuralVpnService.class);
+        vpnIntent.setAction("STOP_VPN");
+        startService(vpnIntent);
+        
+        isConnected = false;
+        statusIcon.setText("🔴");
+        statusText.setText("SYSTEM STANDBY");
+        statusText.setTextColor(Color.parseColor("#888888"));
+        connectBtn.setBackgroundResource(R.drawable.bg_button);
+        connectBtn.setText("TAP TO IGNITE");
+        connectBtn.setTextColor(Color.BLACK);
     }
 }
