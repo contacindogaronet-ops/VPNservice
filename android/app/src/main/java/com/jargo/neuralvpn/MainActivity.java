@@ -10,6 +10,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
@@ -26,6 +27,8 @@ import java.io.InputStreamReader;
 import core.Core;
 
 public class MainActivity extends AppCompatActivity {
+
+    private static final String TAG = "NeuralVPN";
 
     private View layoutHome;
     private View layoutRules;
@@ -74,19 +77,23 @@ public class MainActivity extends AppCompatActivity {
 
     private final ActivityResultLauncher<String> notificationPermissionLauncher =
             registerForActivityResult(new ActivityResultContracts.RequestPermission(), isGranted -> {
-                // Notifications permission handled
+                // Permission handled
             });
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
-
-        initViews();
-        setupNavigation();
-        setupActions();
-        requestSystemPermissions();
-        startLogPoller();
+        try {
+            setContentView(R.layout.activity_main);
+            initViews();
+            setupNavigation();
+            setupActions();
+            requestSystemPermissions();
+            startLogPoller();
+        } catch (Throwable t) {
+            Log.e(TAG, "Fatal error on onCreate: ", t);
+            Toast.makeText(this, "Startup error: " + t.getMessage(), Toast.LENGTH_LONG).show();
+        }
     }
 
     private void initViews() {
@@ -113,7 +120,11 @@ public class MainActivity extends AppCompatActivity {
         svLogsScroll = findViewById(R.id.sv_logs_scroll);
         btnClearLogs = findViewById(R.id.btn_clear_logs);
 
-        updateVpnUiState(Core.isRunning());
+        boolean running = false;
+        try {
+            running = Core.isRunning();
+        } catch (Throwable ignored) {}
+        updateVpnUiState(running);
     }
 
     private void setupNavigation() {
@@ -135,7 +146,12 @@ public class MainActivity extends AppCompatActivity {
 
     private void setupActions() {
         btnToggleVpn.setOnClickListener(v -> {
-            if (Core.isRunning()) {
+            boolean isRunning = false;
+            try {
+                isRunning = Core.isRunning();
+            } catch (Throwable ignored) {}
+
+            if (isRunning) {
                 stopVpnService();
             } else {
                 prepareAndStartVpn();
@@ -150,15 +166,15 @@ public class MainActivity extends AppCompatActivity {
         });
 
         btnClearRules.setOnClickListener(v -> {
-            Core.loadRules("");
+            try {
+                Core.loadRules("");
+            } catch (Throwable ignored) {}
             tvRulesStats.setText("Rules Loaded: 0");
             tvRulesContent.setText("No rules active. All traffic will route to SOCKS5 proxy default.");
             Toast.makeText(this, "Routing rules cleared", Toast.LENGTH_SHORT).show();
         });
 
-        btnClearLogs.setOnClickListener(v -> {
-            tvLogsConsole.setText("");
-        });
+        btnClearLogs.setOnClickListener(v -> tvLogsConsole.setText(""));
     }
 
     private void prepareAndStartVpn() {
@@ -244,12 +260,14 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void run() {
                 if (isPollingLogs) {
-                    String logs = Core.pullLogs();
-                    if (logs != null && !logs.isEmpty()) {
-                        tvLogsConsole.append(logs + "\n");
-                        svLogsScroll.post(() -> svLogsScroll.fullScroll(View.FOCUS_DOWN));
-                    }
-                    updateVpnUiState(Core.isRunning());
+                    try {
+                        String logs = Core.pullLogs();
+                        if (logs != null && !logs.isEmpty()) {
+                            tvLogsConsole.append(logs + "\n");
+                            svLogsScroll.post(() -> svLogsScroll.fullScroll(View.FOCUS_DOWN));
+                        }
+                        updateVpnUiState(Core.isRunning());
+                    } catch (Throwable ignored) {}
                 }
                 logPollHandler.postDelayed(this, 500);
             }
