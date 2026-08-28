@@ -5,12 +5,12 @@ import android.content.Intent;
 import android.graphics.Color;
 import android.net.VpnService;
 import android.os.Bundle;
-import android.widget.Button;
+import android.view.View;
 import android.widget.TextView;
 
 public class MainActivity extends Activity {
-    private TextView statusText;
-    private Button connectBtn;
+    private TextView statusText, statusIcon, connectBtn;
+    private boolean isConnected = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -18,9 +18,16 @@ public class MainActivity extends Activity {
         setContentView(R.layout.activity_main);
 
         statusText = findViewById(R.id.statusText);
+        statusIcon = findViewById(R.id.statusIcon);
         connectBtn = findViewById(R.id.connectBtn);
 
-        connectBtn.setOnClickListener(v -> requestVpnPermission());
+        connectBtn.setOnClickListener(v -> {
+            if (!isConnected) {
+                requestVpnPermission();
+            } else {
+                // TODO: Logika pemutusan VPN (Disconnect) akan ditanam di sini
+            }
+        });
     }
 
     private void requestVpnPermission() {
@@ -37,18 +44,24 @@ public class MainActivity extends Activity {
         if (requestCode == 1 && resultCode == RESULT_OK) {
             startVpnEngine();
         } else {
-            statusText.setText("STATUS: IZIN DITOLAK KERNEL");
+            statusText.setText("ACCESS DENIED");
+            statusIcon.setText("❌");
         }
     }
 
     private void startVpnEngine() {
         Intent vpnIntent = new Intent(this, NeuralVpnService.class);
-        // 🔴 KUNCI ARSITEKTUR: Jangan gunakan startForegroundService di Android 14 untuk VPN
         startService(vpnIntent);
         
-        statusText.setText("STATUS: KUL ENGINE AKTIF");
-        statusText.setTextColor(Color.GREEN);
-        connectBtn.setText("CONNECTED");
-        connectBtn.setEnabled(false);
+        isConnected = true;
+        
+        // Transformasi Visual (Dashboard Aktif)
+        statusIcon.setText("🟢");
+        statusText.setText("SECURE TUNNEL ACTIVE");
+        statusText.setTextColor(Color.parseColor("#00E676"));
+        
+        connectBtn.setBackgroundResource(R.drawable.bg_button_off);
+        connectBtn.setText("DISCONNECT");
+        connectBtn.setTextColor(Color.WHITE);
     }
 }
