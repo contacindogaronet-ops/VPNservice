@@ -11,30 +11,13 @@ jobs:
     - name: 📥 Memuat Kode Sumber
       uses: actions/checkout@v4
 
-    - name: ⚙️ Setup Golang 1.22
-      uses: actions/setup-go@v5
-      with:
-        go-version: '1.22'
-
-    - name: ☕ Setup Java 17 (Syarat Gradle)
+    - name: ☕ Setup Java 17
       uses: actions/setup-java@v4
       with:
         distribution: 'temurin'
         java-version: '17'
 
-    - name: 🛠️ Inisialisasi GoMobile & Dependencies
-      run: |
-        go mod download
-        go install golang.org/x/mobile/cmd/gomobile@latest
-        go install golang.org/x/mobile/cmd/gobind@latest
-        gomobile init
-
-    - name: 🧬 Kompilasi Golang ke Android Archive (.aar)
-      run: |
-        mkdir -p android/app/libs
-        gomobile bind -target=android -androidapi 21 -o android/app/libs/core.aar ./core
-
-    - name: 🔨 Kompilasi APK (Modern DSL)
+    - name: 🔨 Kompilasi APK (Bypass Golang)
       run: |
         cd android
         gradle assembleDebug
