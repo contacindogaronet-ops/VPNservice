@@ -4,7 +4,6 @@ import android.app.Activity;
 import android.content.Intent;
 import android.graphics.Color;
 import android.net.VpnService;
-import android.os.Build;
 import android.os.Bundle;
 import android.widget.Button;
 import android.widget.TextView;
@@ -25,12 +24,11 @@ public class MainActivity extends Activity {
     }
 
     private void requestVpnPermission() {
-        // 🔴 KUNCI ARSITEKTUR: Meminta izin Kernel Android secara eksplisit
         Intent intent = VpnService.prepare(this);
         if (intent != null) {
             startActivityForResult(intent, 1);
         } else {
-            startVpnEngine(); // Izin sudah ada, langsung eksekusi
+            startVpnEngine();
         }
     }
 
@@ -45,16 +43,12 @@ public class MainActivity extends Activity {
 
     private void startVpnEngine() {
         Intent vpnIntent = new Intent(this, NeuralVpnService.class);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(vpnIntent);
-        } else {
-            startService(vpnIntent);
-        }
+        // 🔴 KUNCI ARSITEKTUR: Jangan gunakan startForegroundService di Android 14 untuk VPN
+        startService(vpnIntent);
         
-        // Update UI Interaktif
-        statusText.setText("STATUS: KUL ENGINE AKTIF (LAYER 3)");
+        statusText.setText("STATUS: KUL ENGINE AKTIF");
         statusText.setTextColor(Color.GREEN);
         connectBtn.setText("CONNECTED");
-        connectBtn.setEnabled(false); // Kunci tombol
+        connectBtn.setEnabled(false);
     }
 }

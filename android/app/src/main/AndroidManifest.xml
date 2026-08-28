@@ -1,17 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     
-    <!-- Izin Absolut untuk Mesin Jaringan -->
     <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:allowBackup="true"
         android:label="Neural VPN"
         android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
         
-        <!-- Pendaftaran Antarmuka (UI) -->
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -19,10 +15,10 @@
             </intent-filter>
         </activity>
 
-        <!-- Pendaftaran Mesin Latar Belakang (Wajib BIND_VPN_SERVICE) -->
+        <!-- 🔴 KUNCI ARSITEKTUR: exported wajib true agar OS bisa menyuntikkan jalur TUN -->
         <service android:name=".NeuralVpnService"
                  android:permission="android.permission.BIND_VPN_SERVICE"
-                 android:exported="false">
+                 android:exported="true">
             <intent-filter>
                 <action android:name="android.net.VpnService" />
             </intent-filter>
