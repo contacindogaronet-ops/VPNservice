@@ -1,15 +1,33 @@
 plugins { id 'com.android.application' }
+
 android {
     namespace 'com.jargo.neuralvpn'
     compileSdk 34
+
+    // 🔴 KUNCI ARSITEKTUR 1: Penguncian Kriptografi Abadi
+    signingConfigs {
+        debug {
+            storeFile file('debug.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+    }
+
     defaultConfig {
         applicationId "com.jargo.neuralvpn"
         minSdk 21
         targetSdk 34
-        versionCode 1
-        versionName "1.0"
+        
+        // 🔴 KUNCI ARSITEKTUR 2: Auto-Increment Versioning
+        // Mengambil nomor urut mesin Cloud. Jika gagal, gunakan 1.
+        versionCode (System.getenv("CI_RUN_NUMBER") ? System.getenv("CI_RUN_NUMBER").toInteger() : 1)
+        versionName "3.0." + (System.getenv("CI_RUN_NUMBER") ?: "0")
     }
-}
-dependencies {
-    implementation files('libs/core.aar')
+
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+        }
+    }
 }
