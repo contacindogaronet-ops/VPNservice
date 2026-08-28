@@ -10,15 +10,16 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="24dp">
+        android:padding="20dp">
 
+        <!-- Status Card -->
         <androidx.cardview.widget.CardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            app:cardBackgroundColor="#1E293B"
-            app:cardCornerRadius="16dp"
-            app:cardElevation="4dp"
-            android:layout_marginBottom="20dp">
+            app:cardBackgroundColor="#131B2E"
+            app:cardCornerRadius="18dp"
+            app:cardElevation="0dp"
+            android:layout_marginBottom="16dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -29,10 +30,11 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="TUNNEL STATUS"
-                    android:textColor="#94A3B8"
-                    android:textSize="12sp"
-                    android:letterSpacing="0.05" />
+                    android:text="ENGINE STATUS"
+                    android:textColor="#64748B"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.08" />
 
                 <TextView
                     android:id="@+id/tv_status_badge"
@@ -42,70 +44,115 @@
                     android:textColor="#94A3B8"
                     android:textSize="22sp"
                     android:textStyle="bold"
-                    android:layout_marginTop="6dp" />
+                    android:layout_marginTop="4dp" />
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 
+        <!-- Quick Presets -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="PROXY CONFIGURATION"
-            android:textColor="#94A3B8"
-            android:textSize="12sp"
-            android:letterSpacing="0.05"
+            android:text="QUICK PRESETS"
+            android:textColor="#64748B"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.08"
+            android:layout_marginBottom="8dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="16dp">
+
+            <Button
+                android:id="@+id/btn_preset_termux_10808"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:text="Termux :10808"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:textColor="#F8FAFC"
+                android:backgroundTint="#1E293B"
+                android:layout_marginEnd="6dp" />
+
+            <Button
+                android:id="@+id/btn_preset_termux_1080"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:text="Termux :1080"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:textColor="#F8FAFC"
+                android:backgroundTint="#1E293B"
+                android:layout_marginStart="6dp" />
+        </LinearLayout>
+
+        <!-- Configuration Card -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="SOCKS5 UPSTREAM CONFIG"
+            android:textColor="#64748B"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.08"
             android:layout_marginBottom="8dp" />
 
         <EditText
             android:id="@+id/et_socks_host"
             android:layout_width="match_parent"
-            android:layout_height="52dp"
-            android:background="#1E293B"
-            android:hint="SOCKS5 Server (e.g. 192.168.1.50)"
-            android:textColorHint="#64748B"
+            android:layout_height="50dp"
+            android:background="#131B2E"
+            android:hint="SOCKS5 Host (e.g. 127.0.0.1)"
+            android:textColorHint="#475569"
             android:textColor="#F8FAFC"
             android:paddingStart="16dp"
             android:paddingEnd="16dp"
-            android:textSize="14sp"
-            android:layout_marginBottom="12dp"
+            android:textSize="13sp"
+            android:layout_marginBottom="10dp"
             android:singleLine="true" />
 
         <EditText
             android:id="@+id/et_socks_port"
             android:layout_width="match_parent"
-            android:layout_height="52dp"
-            android:background="#1E293B"
-            android:hint="SOCKS5 Port (e.g. 1080)"
-            android:textColorHint="#64748B"
+            android:layout_height="50dp"
+            android:background="#131B2E"
+            android:hint="SOCKS5 Port (e.g. 10808)"
+            android:textColorHint="#475569"
             android:textColor="#F8FAFC"
             android:inputType="number"
             android:paddingStart="16dp"
             android:paddingEnd="16dp"
-            android:textSize="14sp"
-            android:layout_marginBottom="12dp"
+            android:textSize="13sp"
+            android:layout_marginBottom="10dp"
             android:singleLine="true" />
 
         <EditText
             android:id="@+id/et_dns_addr"
             android:layout_width="match_parent"
-            android:layout_height="52dp"
-            android:background="#1E293B"
+            android:layout_height="50dp"
+            android:background="#131B2E"
             android:hint="DNS Server (e.g. 1.1.1.1)"
-            android:textColorHint="#64748B"
+            android:textColorHint="#475569"
             android:textColor="#F8FAFC"
             android:paddingStart="16dp"
             android:paddingEnd="16dp"
-            android:textSize="14sp"
-            android:layout_marginBottom="24dp"
+            android:textSize="13sp"
+            android:layout_marginBottom="20dp"
             android:singleLine="true" />
 
+        <!-- Connect Button -->
         <Button
             android:id="@+id/btn_toggle_vpn"
             android:layout_width="match_parent"
             android:layout_height="56dp"
-            android:text="CONNECT"
+            android:text="START TUNNEL"
             android:textColor="#FFFFFF"
             android:textStyle="bold"
-            android:textSize="15sp"
+            android:textSize="14sp"
             android:backgroundTint="#6366F1" />
 
     </LinearLayout>

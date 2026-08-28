@@ -1,7 +1,11 @@
 package com.jargo.neuralvpn;
 
 import android.Manifest;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.net.Uri;
@@ -20,6 +24,7 @@ import android.widget.Toast;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.SwitchCompat;
 import androidx.core.content.ContextCompat;
 import java.io.BufferedReader;
 import java.io.InputStream;
@@ -29,6 +34,7 @@ import core.Core;
 public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "NeuralVPN";
+    private static final String PREFS_NAME = "NeuralVpnPrefs";
 
     private View layoutHome;
     private View layoutRules;
@@ -42,7 +48,12 @@ public class MainActivity extends AppCompatActivity {
     private EditText etSocksHost;
     private EditText etSocksPort;
     private EditText etDnsAddr;
+    private SwitchCompat switchBypassTermux;
+    private EditText etCustomBypass;
     private Button btnToggleVpn;
+
+    private Button btnPresetTermux10808;
+    private Button btnPresetTermux1080;
 
     private TextView tvRulesStats;
     private TextView tvRulesContent;
@@ -52,7 +63,10 @@ public class MainActivity extends AppCompatActivity {
     private TextView tvLogsConsole;
     private ScrollView svLogsScroll;
     private Button btnClearLogs;
+    private Button btnCopyLogs;
+    private SwitchCompat switchAutoScroll;
 
+    private SharedPreferences prefs;
     private final Handler logPollHandler = new Handler(Looper.getMainLooper());
     private boolean isPollingLogs = true;
 
@@ -76,16 +90,17 @@ public class MainActivity extends AppCompatActivity {
             });
 
     private final ActivityResultLauncher<String> notificationPermissionLauncher =
-            registerForActivityResult(new ActivityResultContracts.RequestPermission(), isGranted -> {
-                // Permission handled
-            });
+            registerForActivityResult(new ActivityResultContracts.RequestPermission(), isGranted -> {});
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         try {
             setContentView(R.layout.activity_main);
+            prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+
             initViews();
+            loadSavedPreferences();
             setupNavigation();
             setupActions();
             requestSystemPermissions();
@@ -109,7 +124,12 @@ public class MainActivity extends AppCompatActivity {
         etSocksHost = findViewById(R.id.et_socks_host);
         etSocksPort = findViewById(R.id.et_socks_port);
         etDnsAddr = findViewById(R.id.et_dns_addr);
+        switchBypassTermux = findViewById(R.id.switch_bypass_termux);
+        etCustomBypass = findViewById(R.id.et_custom_bypass);
         btnToggleVpn = findViewById(R.id.btn_toggle_vpn);
+
+        btnPresetTermux10808 = findViewById(R.id.btn_preset_termux_10808);
+        btnPresetTermux1080 = findViewById(R.id.btn_preset_termux_1080);
 
         tvRulesStats = findViewById(R.id.tv_rules_stats);
         tvRulesContent = findViewById(R.id.tv_rules_content);
@@ -119,12 +139,32 @@ public class MainActivity extends AppCompatActivity {
         tvLogsConsole = findViewById(R.id.tv_logs_console);
         svLogsScroll = findViewById(R.id.sv_logs_scroll);
         btnClearLogs = findViewById(R.id.btn_clear_logs);
+        btnCopyLogs = findViewById(R.id.btn_copy_logs);
+        switchAutoScroll = findViewById(R.id.switch_autoscroll);
 
         boolean running = false;
         try {
             running = Core.isRunning();
         } catch (Throwable ignored) {}
         updateVpnUiState(running);
+    }
+
+    private void loadSavedPreferences() {
+        etSocksHost.setText(prefs.getString("socks_host", "127.0.0.1"));
+        etSocksPort.setText(prefs.getString("socks_port", "10808"));
+        etDnsAddr.setText(prefs.getString("dns_addr", "1.1.1.1"));
+        switchBypassTermux.setChecked(prefs.getBoolean("bypass_termux", true));
+        etCustomBypass.setText(prefs.getString("custom_bypass", ""));
+    }
+
+    private void savePreferences() {
+        prefs.edit()
+                .putString("socks_host", etSocksHost.getText().toString().trim())
+                .putString("socks_port", etSocksPort.getText().toString().trim())
+                .putString("dns_addr", etDnsAddr.getText().toString().trim())
+                .putBoolean("bypass_termux", switchBypassTermux.isChecked())
+                .putString("custom_bypass", etCustomBypass.getText().toString().trim())
+                .apply();
     }
 
     private void setupNavigation() {
@@ -145,6 +185,21 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setupActions() {
+        // Quick presets
+        btnPresetTermux10808.setOnClickListener(v -> {
+            etSocksHost.setText("127.0.0.1");
+            etSocksPort.setText("10808");
+            switchBypassTermux.setChecked(true);
+            Toast.makeText(this, "Preset Termux :10808 applied", Toast.LENGTH_SHORT).show();
+        });
+
+        btnPresetTermux1080.setOnClickListener(v -> {
+            etSocksHost.setText("127.0.0.1");
+            etSocksPort.setText("1080");
+            switchBypassTermux.setChecked(true);
+            Toast.makeText(this, "Preset Termux :1080 applied", Toast.LENGTH_SHORT).show();
+        });
+
         btnToggleVpn.setOnClickListener(v -> {
             boolean isRunning = false;
             try {
@@ -175,9 +230,20 @@ public class MainActivity extends AppCompatActivity {
         });
 
         btnClearLogs.setOnClickListener(v -> tvLogsConsole.setText(""));
+
+        btnCopyLogs.setOnClickListener(v -> {
+            String logs = tvLogsConsole.getText().toString();
+            if (!logs.isEmpty()) {
+                ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                ClipData clip = ClipData.newPlainText("NeuralVPN Logs", logs);
+                clipboard.setPrimaryClip(clip);
+                Toast.makeText(this, "Logs copied to clipboard", Toast.LENGTH_SHORT).show();
+            }
+        });
     }
 
     private void prepareAndStartVpn() {
+        savePreferences();
         Intent intent = VpnService.prepare(this);
         if (intent != null) {
             vpnPermissionLauncher.launch(intent);
@@ -187,11 +253,15 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void startVpnService() {
+        savePreferences();
+
         String host = etSocksHost.getText().toString().trim();
         String portStr = etSocksPort.getText().toString().trim();
         String dns = etDnsAddr.getText().toString().trim();
+        boolean bypassTermux = switchBypassTermux.isChecked();
+        String customBypass = etCustomBypass.getText().toString().trim();
 
-        int port = 1080;
+        int port = 10808;
         try {
             if (!portStr.isEmpty()) port = Integer.parseInt(portStr);
         } catch (NumberFormatException ignored) {}
@@ -201,6 +271,8 @@ public class MainActivity extends AppCompatActivity {
         serviceIntent.putExtra(NeuralVpnService.EXTRA_SOCKS_HOST, host);
         serviceIntent.putExtra(NeuralVpnService.EXTRA_SOCKS_PORT, port);
         serviceIntent.putExtra(NeuralVpnService.EXTRA_DNS_ADDR, dns);
+        serviceIntent.putExtra(NeuralVpnService.EXTRA_BYPASS_TERMUX, bypassTermux);
+        serviceIntent.putExtra(NeuralVpnService.EXTRA_CUSTOM_BYPASS, customBypass);
 
         ContextCompat.startForegroundService(this, serviceIntent);
         updateVpnUiState(true);
@@ -222,7 +294,7 @@ public class MainActivity extends AppCompatActivity {
         } else {
             tvStatusBadge.setText("DISCONNECTED");
             tvStatusBadge.setTextColor(Color.parseColor("#94A3B8"));
-            btnToggleVpn.setText("CONNECT");
+            btnToggleVpn.setText("START TUNNEL");
             btnToggleVpn.setBackgroundColor(Color.parseColor("#6366F1"));
         }
     }
@@ -264,7 +336,9 @@ public class MainActivity extends AppCompatActivity {
                         String logs = Core.pullLogs();
                         if (logs != null && !logs.isEmpty()) {
                             tvLogsConsole.append(logs + "\n");
-                            svLogsScroll.post(() -> svLogsScroll.fullScroll(View.FOCUS_DOWN));
+                            if (switchAutoScroll != null && switchAutoScroll.isChecked()) {
+                                svLogsScroll.post(() -> svLogsScroll.fullScroll(View.FOCUS_DOWN));
+                            }
                         }
                         updateVpnUiState(Core.isRunning());
                     } catch (Throwable ignored) {}
