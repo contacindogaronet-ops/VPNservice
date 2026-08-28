@@ -9,9 +9,16 @@ android {
         versionCode 1
         versionName "1.0"
     }
-}
-dependencies {
-    // 🔴 ARSITEKTUR BERSIH:
-    // Tidak ada lagi pemanggilan file .aar. 
-    // Biner Golang dieksekusi langsung dari folder assets oleh Java.
+    
+    // 🔴 KUNCI ARSITEKTUR 1: Deklarasi Absolut Folder Aset
+    sourceSets {
+        main {
+            assets.srcDirs = ['src/main/assets']
+        }
+    }
+
+    // 🔴 KUNCI ARSITEKTUR 2: Larangan Kompresi Mutlak
+    androidResources {
+        noCompress 'core_engine'
+    }
 }
