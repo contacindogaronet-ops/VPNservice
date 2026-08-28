@@ -40,7 +40,6 @@ func BuildIPv4Header(srcIP, dstIP net.IP, protocol byte, payloadLen int) []byte 
 }
 
 func BuildTCPPacket(srcIP, dstIP net.IP, srcPort, dstPort uint16, seq, ack uint32, flags byte, payload []byte) []byte {
-	tcpLen := 20 + len(payload)
 	tcpHeader := make([]byte, 20)
 	binary.BigEndian.PutUint16(tcpHeader[0:2], srcPort)
 	binary.BigEndian.PutUint16(tcpHeader[2:4], dstPort)
@@ -55,7 +54,7 @@ func BuildTCPPacket(srcIP, dstIP net.IP, srcPort, dstPort uint16, seq, ack uint3
 
 	tcpData := append(tcpHeader, payload...)
 
-	// Calculate TCP pseudo-header checksum
+	// Hitung TCP pseudo-header checksum
 	pseudoHeader := make([]byte, 12+len(tcpData))
 	copy(pseudoHeader[0:4], srcIP.To4())
 	copy(pseudoHeader[4:8], dstIP.To4())
@@ -77,7 +76,7 @@ func BuildUDPPacket(srcIP, dstIP net.IP, srcPort, dstPort uint16, payload []byte
 	binary.BigEndian.PutUint16(udpHeader[0:2], srcPort)
 	binary.BigEndian.PutUint16(udpHeader[2:4], dstPort)
 	binary.BigEndian.PutUint16(udpHeader[4:6], uint16(udpLen))
-	udpHeader[6] = 0 // Checksum optional in IPv4
+	udpHeader[6] = 0 // Checksum optional di IPv4
 	udpHeader[7] = 0
 
 	udpData := append(udpHeader, payload...)
