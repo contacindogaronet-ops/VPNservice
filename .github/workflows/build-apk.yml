@@ -11,6 +11,16 @@ jobs:
     - name: 📥 Memuat Kode Sumber
       uses: actions/checkout@v4
 
+    - name: 🔍 Verifikasi Biner (Diagnostik Matrix)
+      run: |
+        echo "Memeriksa brankas aset..."
+        ls -lh android/app/src/main/assets/ || echo "Folder assets tidak ada!"
+        if [ ! -s android/app/src/main/assets/core_engine ]; then
+          echo "🔥 FATAL: Biner core_engine TIDAK ADA atau KOSONG di server Cloud!"
+          exit 1
+        fi
+        echo "✅ Biner terdeteksi dengan sukses!"
+
     - name: ☕ Setup Java 17
       uses: actions/setup-java@v4
       with:
