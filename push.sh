@@ -8,7 +8,6 @@ if [ -z "$MSG" ]; then
 fi
 
 # 1. PAKSA PENELANAN BINER: Abaikan semua aturan gitignore untuk folder aset
-git add -f android/app/src/main/assets/core_engine 2>/dev/null
 
 # 2. Telan sisa kode Java/XML/Gradle
 git add .

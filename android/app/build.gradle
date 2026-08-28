@@ -1,36 +1,49 @@
-plugins { id 'com.android.application' }
+plugins {
+    id 'com.android.application'
+}
 
 android {
     namespace 'com.jargo.neuralvpn'
     compileSdk 34
 
-    signingConfigs {
-        debug {
-            storeFile file('debug.keystore')
-            storePassword 'android'
-            keyAlias 'androiddebugkey'
-            keyPassword 'android'
+    defaultConfig {
+        applicationId "com.jargo.neuralvpn"
+        minSdk 26
+        targetSdk 34
+        versionCode 1
+        versionName "1.0.0"
+
+        ndk {
+            abiFilters "arm64-v8a", "armeabi-v7a", "x86_64"
         }
     }
 
-    defaultConfig {
-        applicationId "com.jargo.neuralvpn"
-        minSdk 21
-        targetSdk 34
-        
-        versionCode (System.getenv("CI_RUN_NUMBER") ? System.getenv("CI_RUN_NUMBER").toInteger() : 1)
-        versionName "3.0." + (System.getenv("CI_RUN_NUMBER") ?: "0")
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            debuggable true
+        }
     }
 
-    buildTypes {
-        debug {
-            signingConfig signingConfigs.debug
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    repositories {
+        flatDir {
+            dirs 'libs'
         }
     }
 }
 
-// 🔴 KUNCI ARSITEKTUR YANG SEMPAT TERAMPUTASI:
-// Wajib ada agar Java bisa melihat otak Golang yang sudah dicetak!
 dependencies {
-    implementation files('libs/core.aar')
+    implementation fileTree(dir: 'libs', include: ['*.aar', '*.jar'])
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'com.google.android.material:material:1.12.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+    implementation 'androidx.cardview:cardview:1.0.0'
 }

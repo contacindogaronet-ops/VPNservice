@@ -1,28 +1,159 @@
 package core
 
 import (
+	"bufio"
+	"fmt"
+	"strings"
 	"sync"
+	"sync/atomic"
+	"time"
 )
 
-var (
-	logMutex  sync.Mutex
-	logBuffer string
+type RuleAction string
+
+const (
+	ActionDirect RuleAction = "DIRECT"
+	ActionProxy  RuleAction = "PROXY"
+	ActionBlock  RuleAction = "BLOCK"
 )
 
-func AddLog(msg string) {
-	logMutex.Lock()
-	defer logMutex.Unlock()
-	logBuffer += msg + "\n"
+type RuleEngine struct {
+	mu          sync.RWMutex
+	domainRules map[string]RuleAction
+	ipRules     map[string]RuleAction
+	ruleCount   int32
 }
 
+var (
+	globalRuleEngine = &RuleEngine{
+		domainRules: make(map[string]RuleAction),
+		ipRules:     make(map[string]RuleAction),
+	}
+
+	logMutex  sync.Mutex
+	logQueue  []string
+	maxLogCap = 2000
+)
+
+// AddLog registers an event into the thread-safe ring buffer.
+func AddLog(level string, message string) {
+	logMutex.Lock()
+	defer logMutex.Unlock()
+
+	timestamp := time.Now().Format("15:04:05.000")
+	formatted := fmt.Sprintf("[%s] [%s] %s", timestamp, strings.ToUpper(level), message)
+
+	if len(logQueue) >= maxLogCap {
+		logQueue = logQueue[1:]
+	}
+	logQueue = append(logQueue, formatted)
+}
+
+// PullLogs extracts and drains all pending logs for the UI consumer.
 func PullLogs() string {
 	logMutex.Lock()
 	defer logMutex.Unlock()
-	res := logBuffer
-	logBuffer = ""
-	return res
+
+	if len(logQueue) == 0 {
+		return ""
+	}
+
+	var sb strings.Builder
+	for i, line := range logQueue {
+		sb.WriteString(line)
+		if i < len(logQueue)-1 {
+			sb.WriteString("\n")
+		}
+	}
+	logQueue = logQueue[:0]
+	return sb.String()
 }
 
-func LoadRules(rulesContent string) {
-	AddLog("⚙️ [SYSTEM] Berhasil memuat matriks rules baru.")
+// LoadRules parses rule definition strings line-by-line.
+// Format: RULE-TYPE,PAYLOAD,ACTION (e.g. DOMAIN-SUFFIX,google.com,PROXY or IP-CIDR,192.168.1.1/32,DIRECT)
+func LoadRules(ruleContent string) int {
+	globalRuleEngine.mu.Lock()
+	defer globalRuleEngine.mu.Unlock()
+
+	globalRuleEngine.domainRules = make(map[string]RuleAction)
+	globalRuleEngine.ipRules = make(map[string]RuleAction)
+
+	scanner := bufio.NewScanner(strings.NewReader(ruleContent))
+	count := 0
+
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, "//") {
+			continue
+		}
+
+		parts := strings.Split(line, ",")
+		if len(parts) < 3 {
+			continue
+		}
+
+		ruleType := strings.ToUpper(strings.TrimSpace(parts[0]))
+		payload := strings.ToLower(strings.TrimSpace(parts[1]))
+		actionStr := strings.ToUpper(strings.TrimSpace(parts[2]))
+
+		var action RuleAction
+		switch actionStr {
+		case "DIRECT":
+			action = ActionDirect
+		case "BLOCK":
+			action = ActionBlock
+		case "PROXY":
+			action = ActionProxy
+		default:
+			action = ActionProxy
+		}
+
+		switch ruleType {
+		case "DOMAIN", "DOMAIN-SUFFIX":
+			globalRuleEngine.domainRules[payload] = action
+			count++
+		case "IP", "IP-CIDR":
+			globalRuleEngine.ipRules[payload] = action
+			count++
+		}
+	}
+
+	atomic.StoreInt32(&globalRuleEngine.ruleCount, int32(count))
+	AddLog("INFO", fmt.Sprintf("Successfully compiled and loaded %d routing rules", count))
+	return count
+}
+
+// MatchDomain evaluates domain routing rules with suffix matching support.
+func MatchDomain(domain string) RuleAction {
+	globalRuleEngine.mu.RLock()
+	defer globalRuleEngine.mu.RUnlock()
+
+	domain = strings.ToLower(strings.TrimSpace(domain))
+	if action, exists := globalRuleEngine.domainRules[domain]; exists {
+		return action
+	}
+
+	for ruleDomain, action := range globalRuleEngine.domainRules {
+		if strings.HasSuffix(domain, "."+ruleDomain) || domain == ruleDomain {
+			return action
+		}
+	}
+
+	return ActionProxy
+}
+
+// MatchIP evaluates direct IP routing actions.
+func MatchIP(ipStr string) RuleAction {
+	globalRuleEngine.mu.RLock()
+	defer globalRuleEngine.mu.RUnlock()
+
+	if action, exists := globalRuleEngine.ipRules[ipStr]; exists {
+		return action
+	}
+	return ActionProxy
+}
+
+// GetLoadedRulesCount returns the current active rule count.
+func GetLoadedRulesCount() int {
+	return int(atomic.LoadInt32(&globalRuleEngine.ruleCount))
 }

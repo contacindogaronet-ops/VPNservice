@@ -1,50 +1,60 @@
-name: Neural VPN APK Compiler
+name: Build Neural VPN APK
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
 
 jobs:
-  build-apk:
+  build:
     runs-on: ubuntu-latest
+
     steps:
-    - name: 📥 Memuat Kode Sumber
-      uses: actions/checkout@v4
+      - name: Checkout Codebase
+        uses: actions/checkout@v4
 
-    - name: ⚙️ Setup Golang 1.22
-      uses: actions/setup-go@v5
-      with:
-        go-version: '1.22'
+      - name: Setup Java JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
 
-    - name: ☕ Setup Java 17
-      uses: actions/setup-java@v4
-      with:
-        distribution: 'temurin'
-        java-version: '17'
+      - name: Setup Go Environment
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
 
-    - name: 🛠️ Inisialisasi GoMobile
-      run: |
-        cd core
-        go mod tidy
-        cd ..
-        go install golang.org/x/mobile/cmd/gomobile@latest
-        go install golang.org/x/mobile/cmd/gobind@latest
-        gomobile init
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r26b
 
-    - name: 🧬 Kompilasi Golang ke .aar (Lapis 3 Engine)
-      run: |
-        mkdir -p android/app/libs
-        gomobile bind -target=android -androidapi 21 -o android/app/libs/core.aar ./core
+      - name: Install GoMobile & Toolchain
+        run: |
+          go install golang.org/x/mobile/cmd/gomobile@latest
+          go install golang.org/x/mobile/cmd/gobind@latest
+          gomobile init
 
-    - name: 🔨 Kompilasi APK (Auto-Versioning & Static Signature)
-      env:
-        CI_RUN_NUMBER: ${{ github.run_number }}
-      run: |
-        cd android
-        gradle assembleDebug
+      - name: Compile Go Monolithic Kernel (AAR)
+        run: |
+          mkdir -p android/app/libs
+          gomobile bind -v -target=android -androidapi 26 -o android/app/libs/core.aar ./core
 
-    - name: 📦 Distribusi Artefak (APK)
-      uses: actions/upload-artifact@v4
-      with:
-        name: Neural-VPN-App
-        path: android/app/build/outputs/apk/debug/app-debug.apk
+      - name: Validate Gradle Wrapper
+        run: |
+          cd android
+          chmod +x gradlew
+
+      - name: Build Android APK
+        run: |
+          cd android
+          ./gradlew assembleDebug --stacktrace
+
+      - name: Upload Debug APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NeuralVPN-Debug-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk

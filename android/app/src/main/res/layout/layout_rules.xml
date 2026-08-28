@@ -1,38 +1,65 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="24dp">
-    
-    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="ROUTING &amp; PROTOCOL" android:textColor="#FFFFFF" android:textSize="22sp" android:textStyle="bold" android:layout_marginBottom="24dp"/>
-    
-    <!-- Opsi 1 -->
-    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:background="@drawable/bg_card" android:padding="20dp" android:layout_marginBottom="16dp" android:gravity="center_vertical">
-        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="MTProto Telegram Boost" android:textColor="#00BBFF" android:textStyle="bold" android:textSize="16sp"/>
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Bypass limit &amp; inject 1:1 speed ratio" android:textColor="#A0A0A0" android:textSize="12sp" android:layout_marginTop="4dp"/>
-        </LinearLayout>
-        <Switch android:id="@+id/switchTele" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="24dp">
+
+    <TextView
+        android:id="@+id/tv_rules_stats"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Rules Loaded: 0"
+        android:textColor="#38BDF8"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="12dp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginBottom="16dp">
+
+        <Button
+            android:id="@+id/btn_pick_rules"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:text="IMPORT RULES"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:backgroundTint="#6366F1"
+            android:layout_marginEnd="8dp" />
+
+        <Button
+            android:id="@+id/btnClearRules"
+            android:id="@+id/btn_clear_rules"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:text="CLEAR"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:backgroundTint="#334155"
+            android:layout_marginStart="8dp" />
     </LinearLayout>
 
-    <!-- Opsi 2 -->
-    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:background="@drawable/bg_card" android:padding="20dp" android:layout_marginBottom="24dp" android:gravity="center_vertical">
-        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="VVIP Ad-Block (DPI)" android:textColor="#FF3D00" android:textStyle="bold" android:textSize="16sp"/>
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Deep Packet Inspection untuk pelacak" android:textColor="#A0A0A0" android:textSize="12sp" android:layout_marginTop="4dp"/>
-        </LinearLayout>
-        <Switch android:id="@+id/switchVvip" android:layout_width="wrap_content" android:layout_height="wrap_content" />
-    </LinearLayout>
-    
-    <!-- Tombol Upload File -->
-    <LinearLayout
-        android:id="@+id/btnUploadRules"
+    <ScrollView
         android:layout_width="match_parent"
-        android:layout_height="64dp"
-        android:background="@drawable/bg_card"
-        android:clickable="true"
-        android:focusable="true"
-        android:foreground="?attr/selectableItemBackground"
-        android:gravity="center"
-        android:orientation="horizontal">
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="📂 LOAD CUSTOM RULES (.TXT)" android:textColor="#00E676" android:textStyle="bold" android:textSize="14sp"/>
-    </LinearLayout>
+        android:layout_height="match_parent"
+        android:background="#1E293B"
+        android:padding="16dp">
+
+        <TextView
+            android:id="@+id/tv_rules_content"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="No rules active. All traffic will route to SOCKS5 proxy default."
+            android:textColor="#94A3B8"
+            android:fontFamily="monospace"
+            android:textSize="12sp" />
+    </ScrollView>
 </LinearLayout>

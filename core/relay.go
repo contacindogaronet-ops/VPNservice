@@ -1,100 +1,170 @@
 package core
 
 import (
+	"context"
+	"encoding/binary"
+	"errors"
+	"fmt"
 	"io"
 	"net"
 	"sync"
-	"github.com/rs/zerolog/log"
+	"time"
 )
 
-// 🔴 KUNCI ARSITEKTUR: Memory Pool Ganda untuk efisiensi ekstrem
-var relayPool32 = sync.Pool{
-	New: func() interface{} {
-		b := make([]byte, 32*1024) // 32KB (Reguler / Anti-Jitter)
+const BufferSize = 32 * 1024
+
+var bufferPool = sync.Pool{
+	New: func() any {
+		b := make([]byte, BufferSize)
 		return &b
 	},
 }
 
-var vvipPool4M = sync.Pool{
-	New: func() interface{} {
-		b := make([]byte, 4*1024*1024) // 4MB (VVIP / MTProto)
-		return &b
-	},
+type SOCKS5Relay struct {
+	ProxyAddress string
+	Timeout      time.Duration
 }
 
-// HandleSOCKS5 mematuhi RFC 1928 (Wajib kirim reply SUCCESS sebelum stream relay)
-func HandleSOCKS5(client net.Conn, targetAddr string, isVVIP bool) {
-	// RFC 1928 SOCKS5 Success Reply Matrix (0x00 = Succeeded)
-	successReply := []byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
-	
-	_, err := client.Write(successReply)
-	if err != nil {
-		client.Close()
-		return
+func NewSOCKS5Relay(proxyAddress string, timeout time.Duration) *SOCKS5Relay {
+	return &SOCKS5Relay{
+		ProxyAddress: proxyAddress,
+		Timeout:      timeout,
 	}
-
-	target, err := net.Dial("tcp", targetAddr)
-	if err != nil {
-		client.Close()
-		return
-	}
-
-	RelayTCP(client, target, isVVIP)
 }
 
-// RelayTCP menerapkan Aggressive Tear-down & Linux splice(2) Zero-Copy
-func RelayTCP(client, target net.Conn, isVVIP bool) {
-	// Wajib SetNoDelay(true) untuk melumpuhkan Nagle's Algorithm (Latency Tuning)
-	if tcpClient, ok := client.(*net.TCPConn); ok {
-		tcpClient.SetNoDelay(true)
-	}
-	if tcpTarget, ok := target.(*net.TCPConn); ok {
-		tcpTarget.SetNoDelay(true)
+// Dial creates an authenticated RFC 1928 SOCKS5 tunnel to target host:port.
+func (r *SOCKS5Relay) Dial(ctx context.Context, targetHost string, targetPort uint16) (net.Conn, error) {
+	dialer := net.Dialer{Timeout: r.Timeout}
+	conn, err := dialer.DialContext(ctx, "tcp", r.ProxyAddress)
+	if err != nil {
+		return nil, fmt.Errorf("failed connecting to SOCKS5 upstream %s: %w", r.ProxyAddress, err)
 	}
 
+	// 1. Version identifier and method selection
+	if _, err := conn.Write([]byte{0x05, 0x01, 0x00}); err != nil {
+		_ = conn.Close()
+		return nil, fmt.Errorf("socks5 handshake method write failed: %w", err)
+	}
+
+	resp := make([]byte, 2)
+	if _, err := io.ReadFull(conn, resp); err != nil {
+		_ = conn.Close()
+		return nil, fmt.Errorf("socks5 handshake method read failed: %w", err)
+	}
+
+	if resp[0] != 0x05 || resp[1] != 0x00 {
+		_ = conn.Close()
+		return nil, fmt.Errorf("unsupported socks5 authentication: ver=%d auth=%d", resp[0], resp[1])
+	}
+
+	// 2. Transmit SOCKS5 Request
+	reqBuf := make([]byte, 0, 260)
+	reqBuf = append(reqBuf, 0x05, 0x01, 0x00) // VER=5, CMD=CONNECT, RSV=0
+
+	ip := net.ParseIP(targetHost)
+	if ip4 := ip.To4(); ip4 != nil {
+		reqBuf = append(reqBuf, 0x01) // ATYP: IPv4
+		reqBuf = append(reqBuf, ip4...)
+	} else if ip6 := ip.To16(); ip6 != nil {
+		reqBuf = append(reqBuf, 0x04) // ATYP: IPv6
+		reqBuf = append(reqBuf, ip6...)
+	} else {
+		if len(targetHost) > 255 {
+			_ = conn.Close()
+			return nil, errors.New("target domain exceeds max RFC 1928 length (255)")
+		}
+		reqBuf = append(reqBuf, 0x03) // ATYP: Domain name
+		reqBuf = append(reqBuf, byte(len(targetHost)))
+		reqBuf = append(reqBuf, targetHost...)
+	}
+
+	portBytes := make([]byte, 2)
+	binary.BigEndian.PutUint16(portBytes, targetPort)
+	reqBuf = append(reqBuf, portBytes...)
+
+	if _, err := conn.Write(reqBuf); err != nil {
+		_ = conn.Close()
+		return nil, fmt.Errorf("socks5 connect request transmission error: %w", err)
+	}
+
+	// 3. Receive SOCKS5 Server Response
+	replyHeader := make([]byte, 4)
+	if _, err := io.ReadFull(conn, replyHeader); err != nil {
+		_ = conn.Close()
+		return nil, fmt.Errorf("socks5 connect reply read error: %w", err)
+	}
+
+	if replyHeader[1] != 0x00 {
+		_ = conn.Close()
+		return nil, fmt.Errorf("socks5 connection rejected with status code: 0x%02X", replyHeader[1])
+	}
+
+	// Drain BND.ADDR and BND.PORT
+	var bndAddrLen int
+	switch replyHeader[3] {
+	case 0x01: // IPv4
+		bndAddrLen = 4
+	case 0x04: // IPv6
+		bndAddrLen = 16
+	case 0x03: // Domain
+		domainLen := make([]byte, 1)
+		if _, err := io.ReadFull(conn, domainLen); err != nil {
+			_ = conn.Close()
+			return nil, err
+		}
+		bndAddrLen = int(domainLen[0])
+	default:
+		_ = conn.Close()
+		return nil, fmt.Errorf("unknown ATYP in reply: 0x%02X", replyHeader[3])
+	}
+
+	discardBuf := make([]byte, bndAddrLen+2)
+	if _, err := io.ReadFull(conn, discardBuf); err != nil {
+		_ = conn.Close()
+		return nil, err
+	}
+
+	return conn, nil
+}
+
+// Splice conducts bidirectional zero-allocation data transfer with aggressive socket teardown.
+func (r *SOCKS5Relay) Splice(local net.Conn, remote net.Conn) {
 	var wg sync.WaitGroup
 	wg.Add(2)
 
-	pool := &relayPool32
-	if isVVIP {
-		pool = &vvipPool4M
-		// Pencegahan pemotongan paket enkripsi (Spesifik VVIP)
-		if tcpTarget, ok := target.(*net.TCPConn); ok {
-			tcpTarget.SetReadBuffer(4 * 1024 * 1024)
+	pipe := func(dst net.Conn, src net.Conn, direction string) {
+		defer wg.Done()
+		bufPtr := bufferPool.Get().(*[]byte)
+		defer bufferPool.Put(bufPtr)
+
+		buf := *bufPtr
+		for {
+			nr, readErr := src.Read(buf)
+			if nr > 0 {
+				nw, writeErr := dst.Write(buf[0:nr])
+				if writeErr != nil {
+					break
+				}
+				if nr != nw {
+					break
+				}
+			}
+			if readErr != nil {
+				break
+			}
 		}
-		log.Info().Msg("⚡ Arsitektur VVIP/MTProto (4MB) Diaktifkan")
+
+		if tcpConn, ok := dst.(*net.TCPConn); ok {
+			_ = tcpConn.CloseWrite()
+		} else {
+			_ = dst.Close()
+		}
 	}
 
-	// JALUR 1: Client -> Target
-	go func() {
-		defer wg.Done()
-		// 🔴 Aggressive Tear-down: Larang channel <-done, tutup paksa kedua sisi!
-		defer client.Close() 
-		defer target.Close()
-
-		bufPtr := pool.Get().(*[]byte)
-		defer pool.Put(bufPtr)
-
-		io.CopyBuffer(target, client, *bufPtr)
-	}()
-
-	// JALUR 2: Target -> Client
-	go func() {
-		defer wg.Done()
-		// 🔴 Aggressive Tear-down
-		defer target.Close()
-		defer client.Close()
-
-		bufPtr := pool.Get().(*[]byte)
-		defer pool.Put(bufPtr)
-
-		io.CopyBuffer(client, target, *bufPtr)
-	}()
+	go pipe(remote, local, "Uplink")
+	go pipe(local, remote, "Downlink")
 
 	wg.Wait()
-}
-
-// routeToSOCKS adalah jembatan sementara yang mengalihkan IP Lapis 3 ke Mesin Lapis 5
-func routeToSOCKS(packet []byte) {
-	// (Di sini Netstack gVisor akan ditanam nantinya untuk mengonversi IP menjadi net.Conn)
+	_ = local.Close()
+	_ = remote.Close()
 }

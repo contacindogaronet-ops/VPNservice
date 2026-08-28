@@ -1,13 +1,50 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="24dp">
-    
-    <RelativeLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="16dp">
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="KERNEL LOGS" android:textColor="#FFFFFF" android:textSize="20sp" android:textStyle="bold"/>
-        <Switch android:id="@+id/switchLogs" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_alignParentRight="true"/>
-    </RelativeLayout>
-    
-    <ScrollView android:layout_width="match_parent" android:layout_height="match_parent" android:background="#111111" android:padding="12dp" android:layout_marginBottom="80dp">
-        <TextView android:id="@+id/tvLogs" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="> KUL Engine v3.0 diinisialisasi...\n> Menunggu lalu lintas Lapis 3...\n" android:textColor="#00E676" android:fontFamily="monospace" android:textSize="12sp"/>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="24dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="12dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="LIVE KERNEL LOGS"
+            android:textColor="#94A3B8"
+            android:textSize="12sp"
+            android:letterSpacing="0.05" />
+
+        <Button
+            android:id="@+id/btn_clear_logs"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:text="CLEAR"
+            android:textSize="10sp"
+            android:backgroundTint="#334155" />
+    </LinearLayout>
+
+    <ScrollView
+        android:id="@+id/sv_logs_scroll"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#020617"
+        android:padding="12dp">
+
+        <TextView
+            android:id="@+id/tv_logs_console"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="#38BDF8"
+            android:fontFamily="monospace"
+            android:textSize="11sp"
+            android:lineSpacingExtra="4dp" />
     </ScrollView>
 </LinearLayout>
