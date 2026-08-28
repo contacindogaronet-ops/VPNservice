@@ -15,7 +15,7 @@ jobs:
       - name: Checkout Codebase
         uses: actions/checkout@v4
 
-      - name: Setup Java JDK
+      - name: Setup Java JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
@@ -31,11 +31,16 @@ jobs:
         uses: nttld/setup-ndk@v1
         with:
           ndk-version: r26b
+          add-to-path: true
 
       - name: Install GoMobile & Toolchain
         run: |
           go install golang.org/x/mobile/cmd/gomobile@latest
           go install golang.org/x/mobile/cmd/gobind@latest
+          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+
+      - name: Initialize GoMobile
+        run: |
           gomobile init
 
       - name: Compile Go Monolithic Kernel (AAR)
@@ -43,15 +48,16 @@ jobs:
           mkdir -p android/app/libs
           gomobile bind -v -target=android -androidapi 26 -o android/app/libs/core.aar ./core
 
-      - name: Validate Gradle Wrapper
-        run: |
-          cd android
-          chmod +x gradlew
+      - name: Setup Gradle CLI (Tanpa Wrapper)
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.6'
+          cache-disabled: false
 
-      - name: Build Android APK
+      - name: Build Android APK Direct with Gradle
+        working-directory: android
         run: |
-          cd android
-          ./gradlew assembleDebug --stacktrace
+          gradle assembleDebug --stacktrace
 
       - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4
