@@ -1,28 +1,29 @@
 package core
 
 import (
+	"fmt"
+	"net"
 	"os"
-	"github.com/rs/zerolog/log"
 )
 
 // StartEngine dipanggil langsung oleh Java VpnService
 func StartEngine(fd int) {
-	log.Info().Msg("🔥 KUL Monolithic Service Terinisialisasi (Pure Go)")
+	AddLog("🔥 [SYSTEM] KUL Monolithic Service Terinisialisasi (Pure Go)")
+	AddLog("📡 [SYSTEM] Menghubungkan langsung ke File Descriptor Kernel...")
 
 	tunFile := os.NewFile(uintptr(fd), "tun")
 	if tunFile == nil {
-		log.Error().Msg("FATAL: Gagal mengambil alih File Descriptor Android.")
+		AddLog("❌ [FATAL] Gagal mengambil alih File Descriptor Android.")
 		return
 	}
 	defer tunFile.Close()
 
-	// Arsitektur pembacaan Zero-Alloc (Native net.Conn.Read style)
 	buffer := make([]byte, 65535)
 
 	for {
 		n, err := tunFile.Read(buffer)
 		if err != nil {
-			log.Error().Err(err).Msg("Pipa TUN Terputus oleh sistem operasi.")
+			AddLog("🛑 [SYSTEM] Pipa TUN Terputus oleh sistem operasi.")
 			break
 		}
 
@@ -31,14 +32,20 @@ func StartEngine(fd int) {
 			continue
 		}
 
-		// Ekstraksi Protokol dari Header IPv4
+		// Ekstraksi Protokol & IP (Header IPv4)
 		protocol := packet[9]
+		
+		// Parsing IP Asal dan Tujuan secara bitwise
+		srcIP := net.IPv4(packet[12], packet[13], packet[14], packet[15])
+		dstIP := net.IPv4(packet[16], packet[17], packet[18], packet[19])
+
 		if protocol == 6 {
-			// Lempar ke mesin gVisor/TCP Relay (Asinkron)
+			// TCP Traffic (Hanya log sebagian kecil agar UI tidak lag)
+			// AddLog(fmt.Sprintf("⚡ [TCP] %s -> %s", srcIP.String(), dstIP.String()))
 			go routeToSOCKS(packet)
 		} else if protocol == 17 {
-			// Lempar ke Otak DNS UDP (Asinkron)
-			go AnalyzeDNS(packet)
+			// UDP / DNS Traffic
+			go AnalyzeDNS(packet, srcIP.String(), dstIP.String())
 		}
 	}
 }

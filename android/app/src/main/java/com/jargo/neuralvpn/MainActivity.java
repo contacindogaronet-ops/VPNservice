@@ -7,6 +7,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.graphics.Color;
 import android.net.TrafficStats;
+import android.net.Uri;
 import android.net.VpnService;
 import android.os.BatteryManager;
 import android.os.Bundle;
@@ -15,21 +16,22 @@ import android.os.Looper;
 import android.view.View;
 import android.widget.Switch;
 import android.widget.TextView;
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.util.Locale;
+import core.Core; // 🔴 Wajib agar bisa memanggil jembatan Golang!
 
 public class MainActivity extends Activity {
-    // UI Elements
     private TextView statusText, statusIcon, connectBtn;
     private TextView tvCpu, tvRam, tvTemp, tvNet, tvLogs;
-    private View viewHome, viewRules, viewLogs;
+    private View viewHome, viewRules, viewLogs, btnUploadRules;
     private TextView navHome, navRules, navLogs;
     private Switch switchTele, switchVvip, switchLogs;
     
-    // State
     private boolean isConnected = false;
     private boolean isLogging = false;
     
-    // Telemetry Engine
     private Handler telemetryHandler = new Handler(Looper.getMainLooper());
     private long lastRxBytes = 0, lastTxBytes = 0;
 
@@ -38,7 +40,6 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        // Inisialisasi Tampilan
         viewHome = findViewById(R.id.viewHome);
         viewRules = findViewById(R.id.viewRules);
         viewLogs = findViewById(R.id.viewLogs);
@@ -59,6 +60,7 @@ public class MainActivity extends Activity {
         switchTele = findViewById(R.id.switchTele);
         switchVvip = findViewById(R.id.switchVvip);
         switchLogs = findViewById(R.id.switchLogs);
+        btnUploadRules = findViewById(R.id.btnUploadRules);
 
         setupNavigation();
         setupSwitches();
@@ -70,6 +72,13 @@ public class MainActivity extends Activity {
         connectBtn.setOnClickListener(v -> {
             if (!isConnected) requestVpnPermission();
             else stopVpnEngine();
+        });
+
+        // 🔴 KUNCI ARSITEKTUR: Buka File Manager Android
+        btnUploadRules.setOnClickListener(v -> {
+            Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+            intent.setType("text/plain");
+            startActivityForResult(intent, 2);
         });
     }
 
@@ -90,11 +99,11 @@ public class MainActivity extends Activity {
     }
 
     private void setupSwitches() {
-        switchTele.setOnCheckedChangeListener((btn, isChecked) -> appendLog(isChecked ? "MTProto Boost 1:1 [ENABLED]" : "MTProto Boost 1:1 [DISABLED]"));
+        switchTele.setOnCheckedChangeListener((btn, isChecked) -> appendLog(isChecked ? "MTProto Boost [ENABLED]" : "MTProto Boost [DISABLED]"));
         switchVvip.setOnCheckedChangeListener((btn, isChecked) -> appendLog(isChecked ? "VVIP Ad-Block DPI [ENABLED]" : "VVIP Ad-Block DPI [DISABLED]"));
         switchLogs.setOnCheckedChangeListener((btn, isChecked) -> {
             isLogging = isChecked;
-            appendLog(isLogging ? "Kernel Log Stream [ON]" : "Kernel Log Stream [PAUSED]");
+            appendLog(isLogging ? "Live Traffic Stream [ON]" : "Live Traffic Stream [PAUSED]");
         });
     }
 
@@ -111,7 +120,34 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        if (requestCode == 1 && resultCode == RESULT_OK) startVpnEngine();
+        // Balasan dari Negosiasi VPN Kernel (Kode 1)
+        if (requestCode == 1 && resultCode == RESULT_OK) {
+            startVpnEngine();
+        } 
+        // 🔴 Balasan dari File Manager Android (Kode 2)
+        else if (requestCode == 2 && resultCode == RESULT_OK && data != null) {
+            readRulesFile(data.getData());
+        }
+    }
+
+    private void readRulesFile(Uri uri) {
+        try {
+            InputStream inputStream = getContentResolver().openInputStream(uri);
+            BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
+            StringBuilder sb = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                sb.append(line).append("\n");
+            }
+            inputStream.close();
+            
+            // ⚡ Tembakkan isi teks ke RAM Golang!
+            Core.loadRules(sb.toString());
+            appendLog("SYSTEM: Matriks Rules berhasil disuntikkan ke Kernel Golang.");
+            
+        } catch (Exception e) {
+            appendLog("ERROR: Gagal membaca file rules - " + e.getMessage());
+        }
     }
 
     private void startVpnEngine() {
@@ -138,9 +174,19 @@ public class MainActivity extends Activity {
         appendLog("VpnService [DESTROYED] - Connection Killed.");
     }
 
+    // Mesin Penarik Data Real-Time
     private Runnable telemetryRunnable = new Runnable() {
         @Override
         public void run() {
+            // 1. Tarik Log dari Golang (Jika saklar log nyala)
+            if (isLogging) {
+                String goLogs = Core.pullLogs(); // ⚡ Memanggil fungsi bridge.go
+                if (goLogs != null && !goLogs.isEmpty()) {
+                    tvLogs.append(goLogs);
+                }
+            }
+
+            // 2. Pembaruan UI Telemetri hanya jika sedang di Tab Home (Hemat CPU)
             if (viewHome.getVisibility() == View.VISIBLE) {
                 ActivityManager actManager = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
                 ActivityManager.MemoryInfo memInfo = new ActivityManager.MemoryInfo();
