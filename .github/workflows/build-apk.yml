@@ -48,6 +48,20 @@ jobs:
           mkdir -p android/app/libs
           gomobile bind -v -target=android -androidapi 26 -o android/app/libs/core.aar ./core
 
+      - name: Setup Persistent Signing Keystore
+        working-directory: android/app
+        run: |
+          # Keystore PKCS12 permanen dengan validitas 10000 hari
+          keytool -genkeypair -v \
+            -keystore neuralvpn.keystore \
+            -storepass neuralvpn123 \
+            -alias neuralvpn \
+            -keypass neuralvpn123 \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=NeuralVPN, OU=Kernel, O=Jargo, L=Jakarta, ST=Jakarta, C=ID"
+
       - name: Setup Gradle Properties
         working-directory: android
         run: |
@@ -61,13 +75,13 @@ jobs:
           gradle-version: '8.6'
           cache-disabled: false
 
-      - name: Build Android APK Direct with Gradle
+      - name: Build Signed Android APK
         working-directory: android
         run: |
           gradle assembleDebug --stacktrace
 
-      - name: Upload Debug APK Artifact
+      - name: Upload Signed APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: NeuralVPN-Debug-APK
+          name: NeuralVPN-Signed-APK
           path: android/app/build/outputs/apk/debug/app-debug.apk

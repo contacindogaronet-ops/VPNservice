@@ -6,6 +6,15 @@ android {
     namespace 'com.jargo.neuralvpn'
     compileSdk 34
 
+    signingConfigs {
+        release {
+            storeFile file("neuralvpn.keystore")
+            storePassword "neuralvpn123"
+            keyAlias "neuralvpn"
+            keyPassword "neuralvpn123"
+        }
+    }
+
     defaultConfig {
         applicationId "com.jargo.neuralvpn"
         minSdk 26
@@ -20,11 +29,12 @@ android {
 
     buildTypes {
         release {
+            signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
         debug {
-            debuggable true
+            signingConfig signingConfigs.release
         }
     }
 

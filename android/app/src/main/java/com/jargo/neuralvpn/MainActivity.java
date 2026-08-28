@@ -52,8 +52,8 @@ public class MainActivity extends AppCompatActivity {
     private EditText etCustomBypass;
     private Button btnToggleVpn;
 
+    private Button btnPresetTermux2007;
     private Button btnPresetTermux10808;
-    private Button btnPresetTermux1080;
 
     private TextView tvRulesStats;
     private TextView tvRulesContent;
@@ -128,8 +128,8 @@ public class MainActivity extends AppCompatActivity {
         etCustomBypass = findViewById(R.id.et_custom_bypass);
         btnToggleVpn = findViewById(R.id.btn_toggle_vpn);
 
+        btnPresetTermux2007 = findViewById(R.id.btn_preset_termux_2007);
         btnPresetTermux10808 = findViewById(R.id.btn_preset_termux_10808);
-        btnPresetTermux1080 = findViewById(R.id.btn_preset_termux_1080);
 
         tvRulesStats = findViewById(R.id.tv_rules_stats);
         tvRulesContent = findViewById(R.id.tv_rules_content);
@@ -150,8 +150,9 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void loadSavedPreferences() {
-        etSocksHost.setText(prefs.getString("socks_host", "127.0.0.1"));
-        etSocksPort.setText(prefs.getString("socks_port", "10808"));
+        // Default langsung diarahkan ke 127.0.0.3:2007
+        etSocksHost.setText(prefs.getString("socks_host", "127.0.0.3"));
+        etSocksPort.setText(prefs.getString("socks_port", "2007"));
         etDnsAddr.setText(prefs.getString("dns_addr", "1.1.1.1"));
         switchBypassTermux.setChecked(prefs.getBoolean("bypass_termux", true));
         etCustomBypass.setText(prefs.getString("custom_bypass", ""));
@@ -185,19 +186,20 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setupActions() {
-        // Quick presets
+        // Preset 127.0.0.3:2007
+        btnPresetTermux2007.setOnClickListener(v -> {
+            etSocksHost.setText("127.0.0.3");
+            etSocksPort.setText("2007");
+            switchBypassTermux.setChecked(true);
+            Toast.makeText(this, "Preset Termux 127.0.0.3:2007 applied", Toast.LENGTH_SHORT).show();
+        });
+
+        // Preset 127.0.0.1:10808
         btnPresetTermux10808.setOnClickListener(v -> {
             etSocksHost.setText("127.0.0.1");
             etSocksPort.setText("10808");
             switchBypassTermux.setChecked(true);
-            Toast.makeText(this, "Preset Termux :10808 applied", Toast.LENGTH_SHORT).show();
-        });
-
-        btnPresetTermux1080.setOnClickListener(v -> {
-            etSocksHost.setText("127.0.0.1");
-            etSocksPort.setText("1080");
-            switchBypassTermux.setChecked(true);
-            Toast.makeText(this, "Preset Termux :1080 applied", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "Preset Termux 127.0.0.1:10808 applied", Toast.LENGTH_SHORT).show();
         });
 
         btnToggleVpn.setOnClickListener(v -> {
@@ -261,7 +263,7 @@ public class MainActivity extends AppCompatActivity {
         boolean bypassTermux = switchBypassTermux.isChecked();
         String customBypass = etCustomBypass.getText().toString().trim();
 
-        int port = 10808;
+        int port = 2007;
         try {
             if (!portStr.isEmpty()) port = Integer.parseInt(portStr);
         } catch (NumberFormatException ignored) {}
