@@ -5,17 +5,20 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Intent;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.net.VpnService;
 import android.os.Build;
 import android.os.ParcelFileDescriptor;
 import androidx.core.app.NotificationCompat;
 import java.io.IOException;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import core.Core;
+import core.SocketProtector;
 
-public class NeuralVpnService extends VpnService {
+public class NeuralVpnService extends VpnService implements SocketProtector {
 
     public static final String ACTION_START = "com.jargo.neuralvpn.ACTION_START";
     public static final String ACTION_STOP = "com.jargo.neuralvpn.ACTION_STOP";
@@ -30,6 +33,19 @@ public class NeuralVpnService extends VpnService {
 
     private ParcelFileDescriptor vpnInterface = null;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
+
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        // Bind Go runtime socket protection to VpnService.protect()
+        Core.registerSocketProtector(this);
+    }
+
+    // GoMobile SocketProtector Interface Callback
+    @Override
+    public boolean protect(long fd) {
+        return protect((int) fd);
+    }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
@@ -70,7 +86,7 @@ public class NeuralVpnService extends VpnService {
 
     private synchronized void launchEngine(String socksAddr, String dnsAddr, boolean bypassTermux, String customBypass) {
         if (vpnInterface != null) {
-            Core.addLog("WARN", "Tunnel interface already active.");
+            Core.addLog("WARN", "Tunnel interface already established.");
             return;
         }
 
@@ -83,36 +99,28 @@ public class NeuralVpnService extends VpnService {
                     .addDnsServer(dnsAddr)
                     .setBlocking(true);
 
-            // 1. KUNCI ANTI-LOOP #1: Selalu bypass paket aplikasi VPN ini sendiri
+            // 1. Bypass aplikasi ini sendiri dari interface VPN
             try {
                 builder.addDisallowedApplication(getPackageName());
-                Core.addLog("INFO", "Self-bypass active: " + getPackageName());
             } catch (PackageManager.NameNotFoundException ignored) {}
 
-            // 2. KUNCI ANTI-LOOP #2: Bypass Termux dan ekosistemnya dari capture TUN
+            // 2. Scan dan Bypass seluruh varian Termux yang terpasang di HP
             if (bypassTermux) {
-                String[] termuxPackages = {
-                        "com.termux",
-                        "com.termux.boot",
-                        "com.termux.api",
-                        "com.termux.styling",
-                        "com.termux.window",
-                        "com.termux.x11"
-                };
-
-                for (String pkg : termuxPackages) {
-                    try {
-                        builder.addDisallowedApplication(pkg);
-                        Core.addLog("INFO", "Anti-Loop: Bypassed " + pkg);
-                    } catch (PackageManager.NameNotFoundException ignored) {
-                        // Package tidak terpasang di HP, lewati
+                PackageManager pm = getPackageManager();
+                List<ApplicationInfo> installedApps = pm.getInstalledApplications(PackageManager.GET_META_DATA);
+                for (ApplicationInfo app : installedApps) {
+                    if (app.packageName.toLowerCase().contains("termux")) {
+                        try {
+                            builder.addDisallowedApplication(app.packageName);
+                            Core.addLog("INFO", "Anti-Loop Auto-Bypassed: " + app.packageName);
+                        } catch (PackageManager.NameNotFoundException ignored) {}
                     }
                 }
             }
 
-            // 3. Bypass aplikasi kustom yang diinput user
+            // 3. Bypass package kustom
             if (customBypass != null && !customBypass.trim().isEmpty()) {
-                String[] extraPackages = customBypass.split("[,;\n]+");
+                String[] extraPackages = customBypass.split("[,;\\n]+");
                 for (String extraPkg : extraPackages) {
                     String cleanPkg = extraPkg.trim();
                     if (!cleanPkg.isEmpty()) {
@@ -120,7 +128,7 @@ public class NeuralVpnService extends VpnService {
                             builder.addDisallowedApplication(cleanPkg);
                             Core.addLog("INFO", "Custom Bypassed: " + cleanPkg);
                         } catch (PackageManager.NameNotFoundException e) {
-                            Core.addLog("WARN", "Bypass skipped, package not found: " + cleanPkg);
+                            Core.addLog("WARN", "Package not found: " + cleanPkg);
                         }
                     }
                 }
@@ -138,7 +146,7 @@ public class NeuralVpnService extends VpnService {
 
             boolean success = Core.startEngine(fd, socksAddr, dnsAddr);
             if (!success) {
-                Core.addLog("ERROR", "Go Kernel rejected parameters.");
+                Core.addLog("ERROR", "Go Kernel start failed.");
                 shutdownVpn();
             }
 
@@ -158,7 +166,7 @@ public class NeuralVpnService extends VpnService {
                     "Neural VPN Active Service",
                     NotificationManager.IMPORTANCE_LOW
             );
-            channel.setDescription("Monitors the active GoMobile VPN kernel session");
+            channel.setDescription("GoMobile TUN SOCKS5 Kernel");
             manager.createNotificationChannel(channel);
         }
 
@@ -175,7 +183,7 @@ public class NeuralVpnService extends VpnService {
 
         Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle("Neural VPN Active (Anti-Loop)")
-                .setContentText("SOCKS5 micro-kernel forwarding active")
+                .setContentText("Bidirectional TUN Virtual TCP/UDP Stack Active")
                 .setSmallIcon(android.R.drawable.ic_lock_lock)
                 .setContentIntent(activityPendingIntent)
                 .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Disconnect", stopPendingIntent)
@@ -187,7 +195,7 @@ public class NeuralVpnService extends VpnService {
     }
 
     private synchronized void shutdownVpn() {
-        Core.addLog("INFO", "Stopping VPN Service and cleaning descriptors...");
+        Core.addLog("INFO", "Shutting down VPN interface...");
         Core.stopEngine();
 
         if (vpnInterface != null) {
@@ -210,7 +218,7 @@ public class NeuralVpnService extends VpnService {
 
     @Override
     public void onRevoke() {
-        Core.addLog("WARN", "VPN permissions revoked by OS.");
+        Core.addLog("WARN", "VPN credentials revoked.");
         shutdownVpn();
         super.onRevoke();
     }
