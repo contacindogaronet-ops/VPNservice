@@ -36,11 +36,8 @@ jobs:
 
     - name: 🔨 Kompilasi APK dengan Gradle Bawaan Ubuntu
       run: |
-        cd android
-        # 1. Sintesis kompilator terisolasi versi stabil
-        gradle wrapper --gradle-version 8.7
-        # 2. Eksekusi kompilasi menggunakan kompilator mandiri
-        ./gradlew assembleDebug
+         cd android
+        gradle assembleDebug
 
     - name: 📦 Distribusi Artefak (APK)
       uses: actions/upload-artifact@v4

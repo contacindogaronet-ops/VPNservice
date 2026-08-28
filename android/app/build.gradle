@@ -11,6 +11,6 @@ android {
     }
 }
 dependencies {
-    // 🔴 KUNCI ARSITEKTUR: Penunjukan absolut ke biner, membypass pemindaian dinamis
+    // Penunjukan absolut ke memori biner Golang
     implementation files('libs/core.aar')
 }
