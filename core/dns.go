@@ -27,20 +27,9 @@ type DNSQueryInfo struct {
 }
 
 var typeMap = map[uint16]string{
-	1:   "A",
-	2:   "NS",
-	5:   "CNAME",
-	6:   "SOA",
-	12:  "PTR",
-	15:  "MX",
-	16:  "TXT",
-	28:  "AAAA",
-	33:  "SRV",
-	65:  "HTTPS",
-	255: "ANY",
+	1: "A", 2: "NS", 5: "CNAME", 6: "SOA", 12: "PTR", 15: "MX", 16: "TXT", 28: "AAAA", 33: "SRV", 65: "HTTPS",
 }
 
-// ParseDNSQuery bitwise RFC 1035 UDP parser.
 func ParseDNSQuery(data []byte) (*DNSQueryInfo, error) {
 	if len(data) < 12 {
 		return nil, errors.New("dns payload truncated")
@@ -73,7 +62,7 @@ func ParseDNSQuery(data []byte) (*DNSQueryInfo, error) {
 	offset = newOffset
 
 	if len(data) < offset+4 {
-		return nil, errors.New("dns question section incomplete")
+		return nil, errors.New("dns question incomplete")
 	}
 
 	qtype := binary.BigEndian.Uint16(data[offset : offset+2])
@@ -165,8 +154,6 @@ func parseDomainLabels(data []byte, offset int) (string, int, error) {
 	}
 	return domain, offset, nil
 }
-
-// ------------------- FAKEDNS ENGINE -------------------
 
 type FakeDNSEngine struct {
 	mu          sync.RWMutex

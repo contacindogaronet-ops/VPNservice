@@ -22,14 +22,14 @@ func Checksum(b []byte) uint16 {
 func BuildIPv4Header(srcIP, dstIP net.IP, protocol byte, payloadLen int) []byte {
 	totalLen := 20 + payloadLen
 	header := make([]byte, 20)
-	header[0] = 0x45 // Version 4, IHL 5
-	header[1] = 0x00 // DSCP / ECN
+	header[0] = 0x45
+	header[1] = 0x00
 	binary.BigEndian.PutUint16(header[2:4], uint16(totalLen))
-	binary.BigEndian.PutUint16(header[4:6], 0x1234) // Identification
-	binary.BigEndian.PutUint16(header[6:8], 0x4000) // Flags: Don't Fragment
-	header[8] = 64                                 // TTL
-	header[9] = protocol                           // 6 for TCP, 17 for UDP
-	header[10] = 0                                 // Checksum placeholder
+	binary.BigEndian.PutUint16(header[4:6], 0x1234)
+	binary.BigEndian.PutUint16(header[6:8], 0x4000)
+	header[8] = 64
+	header[9] = protocol
+	header[10] = 0
 	header[11] = 0
 	copy(header[12:16], srcIP.To4())
 	copy(header[16:20], dstIP.To4())
@@ -45,21 +45,20 @@ func BuildTCPPacket(srcIP, dstIP net.IP, srcPort, dstPort uint16, seq, ack uint3
 	binary.BigEndian.PutUint16(tcpHeader[2:4], dstPort)
 	binary.BigEndian.PutUint32(tcpHeader[4:8], seq)
 	binary.BigEndian.PutUint32(tcpHeader[8:12], ack)
-	tcpHeader[12] = 0x50 // Data offset (5 words = 20 bytes)
+	tcpHeader[12] = 0x50
 	tcpHeader[13] = flags
-	binary.BigEndian.PutUint16(tcpHeader[14:16], 65535) // Window size
-	tcpHeader[16] = 0                                   // Checksum placeholder
+	binary.BigEndian.PutUint16(tcpHeader[14:16], 65535)
+	tcpHeader[16] = 0
 	tcpHeader[17] = 0
-	binary.BigEndian.PutUint16(tcpHeader[18:20], 0) // Urgent pointer
+	binary.BigEndian.PutUint16(tcpHeader[18:20], 0)
 
 	tcpData := append(tcpHeader, payload...)
 
-	// Hitung TCP pseudo-header checksum
 	pseudoHeader := make([]byte, 12+len(tcpData))
 	copy(pseudoHeader[0:4], srcIP.To4())
 	copy(pseudoHeader[4:8], dstIP.To4())
 	pseudoHeader[8] = 0
-	pseudoHeader[9] = 6 // IPPROTO_TCP
+	pseudoHeader[9] = 6
 	binary.BigEndian.PutUint16(pseudoHeader[10:12], uint16(len(tcpData)))
 	copy(pseudoHeader[12:], tcpData)
 
@@ -76,7 +75,7 @@ func BuildUDPPacket(srcIP, dstIP net.IP, srcPort, dstPort uint16, payload []byte
 	binary.BigEndian.PutUint16(udpHeader[0:2], srcPort)
 	binary.BigEndian.PutUint16(udpHeader[2:4], dstPort)
 	binary.BigEndian.PutUint16(udpHeader[4:6], uint16(udpLen))
-	udpHeader[6] = 0 // Checksum optional di IPv4
+	udpHeader[6] = 0
 	udpHeader[7] = 0
 
 	udpData := append(udpHeader, payload...)

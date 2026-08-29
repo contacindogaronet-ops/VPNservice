@@ -7,19 +7,16 @@ import (
 	"syscall"
 )
 
-// SocketProtector is implemented on the Java side by NeuralVpnService.
 type SocketProtector interface {
 	Protect(fd int) bool
 }
 
 var globalProtector SocketProtector
 
-// RegisterSocketProtector binds Android VpnService.protect() to Go runtime.
 func RegisterSocketProtector(p SocketProtector) {
 	globalProtector = p
 }
 
-// isLoopback checks if the address is a local loopback (Termux / Localhost).
 func isLoopback(address string) bool {
 	host, _, err := net.SplitHostPort(address)
 	if err != nil {
@@ -36,11 +33,10 @@ func isLoopback(address string) bool {
 	return false
 }
 
-// ProtectedDialer creates outbound TCP connections, protecting remote sockets and letting loopback connect directly to lo.
 func ProtectedDialer(timeoutSec int) *net.Dialer {
 	return &net.Dialer{
+		Timeout: timeDuration(timeoutSec),
 		Control: func(network, address string, c syscall.RawConn) error {
-			// JANGAN protect alamat loopback (127.0.0.1), biarkan melewati interface lo!
 			if isLoopback(address) {
 				return nil
 			}
@@ -53,7 +49,6 @@ func ProtectedDialer(timeoutSec int) *net.Dialer {
 	}
 }
 
-// ProtectedListenUDP creates a protected UDP socket for DNS queries.
 func ProtectedListenUDP(ctx context.Context) (*net.UDPConn, error) {
 	lc := net.ListenConfig{
 		Control: func(network, address string, c syscall.RawConn) error {
@@ -72,4 +67,8 @@ func ProtectedListenUDP(ctx context.Context) (*net.UDPConn, error) {
 		return nil, err
 	}
 	return conn.(*net.UDPConn), nil
+}
+
+func timeDuration(sec int) net.Addr {
+	return nil
 }

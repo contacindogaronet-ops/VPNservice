@@ -5,7 +5,6 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.net.Uri;
@@ -14,27 +13,22 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.util.Log;
 import android.view.View;
 import android.widget.Button;
-import android.widget.EditText;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.appcompat.widget.SwitchCompat;
 import androidx.core.content.ContextCompat;
 import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.util.concurrent.Executors;
 import core.Core;
 
 public class MainActivity extends AppCompatActivity {
-
-    private static final String TAG = "NeuralVPN";
-    private static final String PREFS_NAME = "NeuralVpnPrefs";
 
     private View layoutHome;
     private View layoutRules;
@@ -45,14 +39,9 @@ public class MainActivity extends AppCompatActivity {
     private View navLogs;
 
     private TextView tvStatusBadge;
-    private EditText etSocksHost;
-    private EditText etSocksPort;
-    private SwitchCompat switchUseInternalDns;
-    private EditText etTargetPackages;
+    private TextView tvLocalPing;
+    private TextView tvGlobalPing;
     private Button btnToggleVpn;
-
-    private Button btnPresetTermux2007;
-    private Button btnPresetTermux10808;
 
     private TextView tvRulesStats;
     private TextView tvRulesContent;
@@ -63,11 +52,9 @@ public class MainActivity extends AppCompatActivity {
     private ScrollView svLogsScroll;
     private Button btnClearLogs;
     private Button btnCopyLogs;
-    private SwitchCompat switchAutoScroll;
 
-    private SharedPreferences prefs;
-    private final Handler logPollHandler = new Handler(Looper.getMainLooper());
-    private boolean isPollingLogs = true;
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private boolean isPolling = true;
 
     private final ActivityResultLauncher<Intent> vpnPermissionLauncher =
             registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
@@ -82,9 +69,7 @@ public class MainActivity extends AppCompatActivity {
             registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
                 if (result.getResultCode() == RESULT_OK && result.getData() != null) {
                     Uri uri = result.getData().getData();
-                    if (uri != null) {
-                        importRulesFromUri(uri);
-                    }
+                    if (uri != null) importRulesFromUri(uri);
                 }
             });
 
@@ -94,19 +79,13 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        try {
-            setContentView(R.layout.activity_main);
-            prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        setContentView(R.layout.activity_main);
 
-            initViews();
-            loadSavedPreferences();
-            setupNavigation();
-            setupActions();
-            requestSystemPermissions();
-            startLogPoller();
-        } catch (Throwable t) {
-            Log.e(TAG, "Startup Error: ", t);
-        }
+        initViews();
+        setupNavigation();
+        setupActions();
+        requestSystemPermissions();
+        startPolling();
     }
 
     private void initViews() {
@@ -119,14 +98,9 @@ public class MainActivity extends AppCompatActivity {
         navLogs = findViewById(R.id.btn_nav_logs);
 
         tvStatusBadge = findViewById(R.id.tv_status_badge);
-        etSocksHost = findViewById(R.id.et_socks_host);
-        etSocksPort = findViewById(R.id.et_socks_port);
-        switchUseInternalDns = findViewById(R.id.switch_use_internal_dns);
-        etTargetPackages = findViewById(R.id.et_target_packages);
+        tvLocalPing = findViewById(R.id.tv_local_ping);
+        tvGlobalPing = findViewById(R.id.tv_global_ping);
         btnToggleVpn = findViewById(R.id.btn_toggle_vpn);
-
-        btnPresetTermux2007 = findViewById(R.id.btn_preset_termux_2007);
-        btnPresetTermux10808 = findViewById(R.id.btn_preset_termux_10808);
 
         tvRulesStats = findViewById(R.id.tv_rules_stats);
         tvRulesContent = findViewById(R.id.tv_rules_content);
@@ -137,29 +111,10 @@ public class MainActivity extends AppCompatActivity {
         svLogsScroll = findViewById(R.id.sv_logs_scroll);
         btnClearLogs = findViewById(R.id.btn_clear_logs);
         btnCopyLogs = findViewById(R.id.btn_copy_logs);
-        switchAutoScroll = findViewById(R.id.switch_autoscroll);
 
         boolean running = false;
-        try {
-            running = Core.isRunning();
-        } catch (Throwable ignored) {}
+        try { running = Core.isRunning(); } catch (Throwable ignored) {}
         updateVpnUiState(running);
-    }
-
-    private void loadSavedPreferences() {
-        etSocksHost.setText(prefs.getString("socks_host", "127.0.0.3"));
-        etSocksPort.setText(prefs.getString("socks_port", "2007"));
-        switchUseInternalDns.setChecked(prefs.getBoolean("use_internal_dns", true));
-        etTargetPackages.setText(prefs.getString("target_packages", "com.android.chrome, com.google.android.youtube, org.telegram.messenger"));
-    }
-
-    private void savePreferences() {
-        prefs.edit()
-                .putString("socks_host", etSocksHost.getText().toString().trim())
-                .putString("socks_port", etSocksPort.getText().toString().trim())
-                .putBoolean("use_internal_dns", switchUseInternalDns.isChecked())
-                .putString("target_packages", etTargetPackages.getText().toString().trim())
-                .apply();
     }
 
     private void setupNavigation() {
@@ -180,23 +135,9 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setupActions() {
-        btnPresetTermux2007.setOnClickListener(v -> {
-            etSocksHost.setText("127.0.0.3");
-            etSocksPort.setText("2007");
-            Toast.makeText(this, "Preset 127.0.0.3:2007 Set", Toast.LENGTH_SHORT).show();
-        });
-
-        btnPresetTermux10808.setOnClickListener(v -> {
-            etSocksHost.setText("127.0.0.1");
-            etSocksPort.setText("10808");
-            Toast.makeText(this, "Preset 127.0.0.1:10808 Set", Toast.LENGTH_SHORT).show();
-        });
-
         btnToggleVpn.setOnClickListener(v -> {
             boolean isRunning = false;
-            try {
-                isRunning = Core.isRunning();
-            } catch (Throwable ignored) {}
+            try { isRunning = Core.isRunning(); } catch (Throwable ignored) {}
 
             if (isRunning) {
                 stopVpnService();
@@ -213,11 +154,9 @@ public class MainActivity extends AppCompatActivity {
         });
 
         btnClearRules.setOnClickListener(v -> {
-            try {
-                Core.loadRules("");
-            } catch (Throwable ignored) {}
+            try { Core.loadRules(""); } catch (Throwable ignored) {}
             tvRulesStats.setText("Rules Loaded: 0");
-            tvRulesContent.setText("No rules active. All traffic routes to SOCKS5.");
+            tvRulesContent.setText("No rules active. All traffic is routed directly by Kernel.");
             Toast.makeText(this, "Rules cleared", Toast.LENGTH_SHORT).show();
         });
 
@@ -235,7 +174,6 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void prepareAndStartVpn() {
-        savePreferences();
         Intent intent = VpnService.prepare(this);
         if (intent != null) {
             vpnPermissionLauncher.launch(intent);
@@ -245,25 +183,10 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void startVpnService() {
-        savePreferences();
-
-        String host = etSocksHost.getText().toString().trim();
-        String portStr = etSocksPort.getText().toString().trim();
-        boolean useInternalDns = switchUseInternalDns.isChecked();
-        String targetPackages = etTargetPackages.getText().toString().trim();
-
-        int port = 2007;
-        try {
-            if (!portStr.isEmpty()) port = Integer.parseInt(portStr);
-        } catch (NumberFormatException ignored) {}
-
         Intent serviceIntent = new Intent(this, NeuralVpnService.class);
         serviceIntent.setAction(NeuralVpnService.ACTION_START);
-        serviceIntent.putExtra(NeuralVpnService.EXTRA_SOCKS_HOST, host);
-        serviceIntent.putExtra(NeuralVpnService.EXTRA_SOCKS_PORT, port);
-        serviceIntent.putExtra(NeuralVpnService.EXTRA_USE_INTERNAL_DNS, useInternalDns);
-        serviceIntent.putExtra(NeuralVpnService.EXTRA_TARGET_PACKAGES, targetPackages);
-
+        serviceIntent.putExtra(NeuralVpnService.EXTRA_SOCKS_ADDR, "127.0.0.3:2007");
+        serviceIntent.putExtra(NeuralVpnService.EXTRA_DNS_ADDR, "1.1.1.1");
         ContextCompat.startForegroundService(this, serviceIntent);
         updateVpnUiState(true);
     }
@@ -277,15 +200,17 @@ public class MainActivity extends AppCompatActivity {
 
     private void updateVpnUiState(boolean running) {
         if (running) {
-            tvStatusBadge.setText("ACTIVE");
+            tvStatusBadge.setText("MONOLITH ACTIVE");
             tvStatusBadge.setTextColor(Color.parseColor("#10B981"));
             btnToggleVpn.setText("DISCONNECT");
             btnToggleVpn.setBackgroundColor(Color.parseColor("#EF4444"));
         } else {
             tvStatusBadge.setText("DISCONNECTED");
             tvStatusBadge.setTextColor(Color.parseColor("#94A3B8"));
-            btnToggleVpn.setText("START TUNNEL");
+            btnToggleVpn.setText("START ENGINE");
             btnToggleVpn.setBackgroundColor(Color.parseColor("#6366F1"));
+            tvLocalPing.setText("- ms");
+            tvGlobalPing.setText("- ms");
         }
     }
 
@@ -294,9 +219,7 @@ public class MainActivity extends AppCompatActivity {
              BufferedReader reader = new BufferedReader(new InputStreamReader(is))) {
             StringBuilder sb = new StringBuilder();
             String line;
-            while ((line = reader.readLine()) != null) {
-                sb.append(line).append("\n");
-            }
+            while ((line = reader.readLine()) != null) sb.append(line).append("\n");
 
             String content = sb.toString();
             long count = Core.loadRules(content);
@@ -317,31 +240,60 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void startLogPoller() {
-        logPollHandler.postDelayed(new Runnable() {
+    private void startPolling() {
+        // Polling Logs
+        mainHandler.postDelayed(new Runnable() {
             @Override
             public void run() {
-                if (isPollingLogs) {
+                if (isPolling) {
                     try {
                         String logs = Core.pullLogs();
                         if (logs != null && !logs.isEmpty()) {
                             tvLogsConsole.append(logs + "\n");
-                            if (switchAutoScroll != null && switchAutoScroll.isChecked()) {
-                                svLogsScroll.post(() -> svLogsScroll.fullScroll(View.FOCUS_DOWN));
-                            }
+                            svLogsScroll.post(() -> svLogsScroll.fullScroll(View.FOCUS_DOWN));
                         }
                         updateVpnUiState(Core.isRunning());
                     } catch (Throwable ignored) {}
                 }
-                logPollHandler.postDelayed(this, 500);
+                mainHandler.postDelayed(this, 500);
             }
         }, 500);
+
+        // Polling Ping Tester (Local & Global)
+        Executors.newSingleThreadScheduledExecutor().scheduleAtFixedRate(() -> {
+            if (!isPolling) return;
+            boolean running = false;
+            try { running = Core.isRunning(); } catch (Throwable ignored) {}
+
+            if (running) {
+                int localPing = (int) Core.testLocalPing("127.0.0.3:2007");
+                int globalPing = (int) Core.testGlobalPing("1.1.1.1:80");
+
+                mainHandler.post(() -> {
+                    if (localPing >= 0) {
+                        tvLocalPing.setText(localPing + " ms");
+                        tvLocalPing.setTextColor(Color.parseColor("#10B981"));
+                    } else {
+                        tvLocalPing.setText("Timeout");
+                        tvLocalPing.setTextColor(Color.parseColor("#EF4444"));
+                    }
+
+                    if (globalPing >= 0) {
+                        tvGlobalPing.setText(globalPing + " ms");
+                        tvGlobalPing.setTextColor(Color.parseColor("#38BDF8"));
+                    } else {
+                        tvGlobalPing.setText("Timeout");
+                        tvGlobalPing.setTextColor(Color.parseColor("#EF4444"));
+                    }
+                });
+            }
+        }, 1, 2, java.util.concurrent.TimeUnit.SECONDS);
     }
 
     @Override
     protected void onDestroy() {
-        isPollingLogs = false;
-        logPollHandler.removeCallbacksAndMessages(null);
+        isPolling = false;
+        mainHandler.removeCallbacksAndMessages(null);
         super.onDestroy();
     }
 }

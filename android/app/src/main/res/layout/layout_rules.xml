@@ -12,71 +12,11 @@
         android:orientation="vertical"
         android:padding="20dp">
 
-        <!-- Anti-Loop Whitelist Card -->
-        <androidx.cardview.widget.CardView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            app:cardBackgroundColor="#131B2E"
-            app:cardCornerRadius="16dp"
-            app:cardElevation="0dp"
-            android:layout_marginBottom="16dp">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="16dp">
-
-                <androidx.appcompat.widget.SwitchCompat
-                    android:id="@+id/switch_bypass_termux"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="Bypass Termux (Anti-Loop)"
-                    android:textColor="#F8FAFC"
-                    android:textSize="13sp"
-                    android:textStyle="bold"
-                    android:checked="true" />
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="Mencegah koneksi memutar (loop) saat server SOCKS5 berjalan di dalam Termux."
-                    android:textColor="#64748B"
-                    android:textSize="11sp"
-                    android:layout_marginTop="4dp" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="EXTRA BYPASSED PACKAGES"
-                    android:textColor="#64748B"
-                    android:textSize="10sp"
-                    android:textStyle="bold"
-                    android:letterSpacing="0.08"
-                    android:layout_marginTop="14dp"
-                    android:layout_marginBottom="6dp" />
-
-                <EditText
-                    android:id="@+id/et_custom_bypass"
-                    android:layout_width="match_parent"
-                    android:layout_height="46dp"
-                    android:background="#090D16"
-                    android:hint="contoh: com.google.android.youtube, org.telegram.messenger"
-                    android:textColorHint="#475569"
-                    android:textColor="#F8FAFC"
-                    android:paddingStart="12dp"
-                    android:paddingEnd="12dp"
-                    android:textSize="12sp"
-                    android:singleLine="true" />
-            </LinearLayout>
-        </androidx.cardview.widget.CardView>
-
-        <!-- Custom Rule Engine -->
         <TextView
             android:id="@+id/tv_rules_stats"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Routing Rules Loaded: 0"
+            android:text="Rules Loaded: 0"
             android:textColor="#38BDF8"
             android:textSize="12sp"
             android:textStyle="bold"
@@ -93,7 +33,7 @@
                 android:layout_width="0dp"
                 android:layout_height="44dp"
                 android:layout_weight="1"
-                android:text="IMPORT RULES FILE"
+                android:text="IMPORT RULES"
                 android:textSize="11sp"
                 android:textStyle="bold"
                 android:backgroundTint="#6366F1"
@@ -104,7 +44,7 @@
                 android:layout_width="0dp"
                 android:layout_height="44dp"
                 android:layout_weight="1"
-                android:text="CLEAR RULES"
+                android:text="CLEAR"
                 android:textSize="11sp"
                 android:textStyle="bold"
                 android:backgroundTint="#1E293B"
@@ -113,7 +53,7 @@
 
         <androidx.cardview.widget.CardView
             android:layout_width="match_parent"
-            android:layout_height="220dp"
+            android:layout_height="320dp"
             app:cardBackgroundColor="#131B2E"
             app:cardCornerRadius="14dp"
             app:cardElevation="0dp">
@@ -127,7 +67,7 @@
                     android:id="@+id/tv_rules_content"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="No custom rules active. All non-bypassed traffic routes to SOCKS5 proxy."
+                    android:text="No rules active. All traffic is routed directly by Kernel."
                     android:textColor="#64748B"
                     android:fontFamily="monospace"
                     android:textSize="11sp" />

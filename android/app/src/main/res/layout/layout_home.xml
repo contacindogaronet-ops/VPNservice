@@ -30,7 +30,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="ENGINE STATUS"
+                    android:text="MONOLITH STATE"
                     android:textColor="#64748B"
                     android:textSize="11sp"
                     android:textStyle="bold"
@@ -48,11 +48,11 @@
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 
-        <!-- Presets -->
+        <!-- Ping Metrics Card -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="LOCAL PRESETS"
+            android:text="REAL-TIME LATENCY MONITORS"
             android:textColor="#64748B"
             android:textSize="11sp"
             android:textStyle="bold"
@@ -65,79 +65,101 @@
             android:orientation="horizontal"
             android:layout_marginBottom="16dp">
 
-            <Button
-                android:id="@+id/btn_preset_termux_2007"
+            <!-- Local Ping Box -->
+            <androidx.cardview.widget.CardView
                 android:layout_width="0dp"
-                android:layout_height="44dp"
+                android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="127.0.0.3:2007"
-                android:textSize="11sp"
-                android:textStyle="bold"
-                android:textColor="#F8FAFC"
-                android:backgroundTint="#6366F1"
-                android:layout_marginEnd="6dp" />
+                app:cardBackgroundColor="#131B2E"
+                app:cardCornerRadius="14dp"
+                app:cardElevation="0dp"
+                android:layout_marginEnd="6dp">
 
-            <Button
-                android:id="@+id/btn_preset_termux_10808"
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="LOCAL PING"
+                        android:textColor="#94A3B8"
+                        android:textSize="10sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tv_local_ping"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="- ms"
+                        android:textColor="#10B981"
+                        android:textSize="18sp"
+                        android:textStyle="bold"
+                        android:layout_marginTop="4dp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="127.0.0.3:2007"
+                        android:textColor="#475569"
+                        android:textSize="9sp" />
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
+
+            <!-- Global Ping Box -->
+            <androidx.cardview.widget.CardView
                 android:layout_width="0dp"
-                android:layout_height="44dp"
+                android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="127.0.0.1:10808"
-                android:textSize="11sp"
-                android:textStyle="bold"
-                android:textColor="#F8FAFC"
-                android:backgroundTint="#1E293B"
-                android:layout_marginStart="6dp" />
+                app:cardBackgroundColor="#131B2E"
+                app:cardCornerRadius="14dp"
+                app:cardElevation="0dp"
+                android:layout_marginStart="6dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="GLOBAL PING"
+                        android:textColor="#94A3B8"
+                        android:textSize="10sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tv_global_ping"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="- ms"
+                        android:textColor="#38BDF8"
+                        android:textSize="18sp"
+                        android:textStyle="bold"
+                        android:layout_marginTop="4dp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Internet Gateway"
+                        android:textColor="#475569"
+                        android:textSize="9sp" />
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
         </LinearLayout>
 
-        <!-- SOCKS5 Host & Port -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="SOCKS5 PROXY CONFIG"
-            android:textColor="#64748B"
-            android:textSize="11sp"
-            android:textStyle="bold"
-            android:letterSpacing="0.08"
-            android:layout_marginBottom="8dp" />
-
-        <EditText
-            android:id="@+id/et_socks_host"
-            android:layout_width="match_parent"
-            android:layout_height="50dp"
-            android:background="#131B2E"
-            android:text="127.0.0.3"
-            android:textColorHint="#475569"
-            android:textColor="#F8FAFC"
-            android:paddingStart="16dp"
-            android:paddingEnd="16dp"
-            android:textSize="13sp"
-            android:layout_marginBottom="10dp"
-            android:singleLine="true" />
-
-        <EditText
-            android:id="@+id/et_socks_port"
-            android:layout_width="match_parent"
-            android:layout_height="50dp"
-            android:background="#131B2E"
-            android:text="2007"
-            android:textColorHint="#475569"
-            android:textColor="#F8FAFC"
-            android:inputType="number"
-            android:paddingStart="16dp"
-            android:paddingEnd="16dp"
-            android:textSize="13sp"
-            android:layout_marginBottom="14dp"
-            android:singleLine="true" />
-
-        <!-- App Whitelist Selection (Anti-Loop Guarantee) -->
+        <!-- Pipeline Info Card -->
         <androidx.cardview.widget.CardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             app:cardBackgroundColor="#131B2E"
             app:cardCornerRadius="14dp"
             app:cardElevation="0dp"
-            android:layout_marginBottom="20dp">
+            android:layout_marginBottom="24dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -145,54 +167,31 @@
                 android:orientation="vertical"
                 android:padding="16dp">
 
-                <androidx.appcompat.widget.SwitchCompat
-                    android:id="@+id/switch_use_internal_dns"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="Proxy AI DNS (Tanpa DNS Luar)"
-                    android:textColor="#F8FAFC"
-                    android:textSize="12sp"
-                    android:textStyle="bold"
-                    android:checked="true" />
-
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="TARGET APLIKASI (WHITELIST BEBAS LOOP)"
-                    android:textColor="#38BDF8"
+                    android:text="ACTIVE WORKFLOW"
+                    android:textColor="#64748B"
                     android:textSize="10sp"
-                    android:textStyle="bold"
-                    android:letterSpacing="0.08"
-                    android:layout_marginTop="14dp"
-                    android:layout_marginBottom="4dp" />
-
-                <EditText
-                    android:id="@+id/et_target_packages"
-                    android:layout_width="match_parent"
-                    android:layout_height="60dp"
-                    android:background="#090D16"
-                    android:hint="com.android.chrome, com.google.android.youtube, org.telegram.messenger"
-                    android:textColorHint="#475569"
-                    android:textColor="#F8FAFC"
-                    android:padding="10dp"
-                    android:textSize="11sp" />
+                    android:textStyle="bold" />
 
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Hanya aplikasi di atas yang ditarik ke VPN. Termux dan sistem dijamin 100% bebas dari loop/crash."
-                    android:textColor="#64748B"
-                    android:textSize="10sp"
-                    android:layout_marginTop="6dp" />
+                    android:text="[ SEMUA APK -> TUN -> GO ENGINE -> INTERNET GLOBAL ]"
+                    android:textColor="#F8FAFC"
+                    android:textSize="11sp"
+                    android:fontFamily="monospace"
+                    android:layout_marginTop="4dp" />
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 
-        <!-- Connect Button -->
+        <!-- One-Tap Action Button -->
         <Button
             android:id="@+id/btn_toggle_vpn"
             android:layout_width="match_parent"
             android:layout_height="56dp"
-            android:text="START TUNNEL"
+            android:text="START ENGINE"
             android:textColor="#FFFFFF"
             android:textStyle="bold"
             android:textSize="14sp"

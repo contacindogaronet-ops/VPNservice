@@ -3,6 +3,7 @@ package core
 import (
 	"bufio"
 	"fmt"
+	"net"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -32,18 +33,16 @@ var (
 
 	logMutex    sync.Mutex
 	logQueue    []string
-	maxLogCap   = 200 // Dibatasi ketat agar RAM tidak membengkak
+	maxLogCap   = 250
 	lastLogTime time.Time
 	lastLogMsg  string
 )
 
-// AddLog menyaring log duplikat dan membatasi ukuran memori log.
 func AddLog(level string, message string) {
 	logMutex.Lock()
 	defer logMutex.Unlock()
 
 	now := time.Now()
-	// Anti-Flood: Jangan catat pesan error yang sama persis dalam rentang 1 detik
 	if message == lastLogMsg && now.Sub(lastLogTime) < 1*time.Second {
 		return
 	}
@@ -124,28 +123,39 @@ func LoadRules(ruleContent string) int {
 	}
 
 	atomic.StoreInt32(&globalRuleEngine.ruleCount, int32(count))
-	AddLog("INFO", fmt.Sprintf("Loaded %d routing rules", count))
+	AddLog("INFO", fmt.Sprintf("Compiled %d routing rules", count))
 	return count
-}
-
-func MatchDomain(domain string) RuleAction {
-	globalRuleEngine.mu.RLock()
-	defer globalRuleEngine.mu.RUnlock()
-
-	domain = strings.ToLower(strings.TrimSpace(domain))
-	if action, exists := globalRuleEngine.domainRules[domain]; exists {
-		return action
-	}
-
-	for ruleDomain, action := range globalRuleEngine.domainRules {
-		if strings.HasSuffix(domain, "."+ruleDomain) || domain == ruleDomain {
-			return action
-		}
-	}
-
-	return ActionProxy
 }
 
 func GetLoadedRulesCount() int {
 	return int(atomic.LoadInt32(&globalRuleEngine.ruleCount))
+}
+
+// TestLocalPing mengukur latensi mesin lokal (127.0.0.3:2007) dalam milidetik.
+func TestLocalPing(addr string) int {
+	if addr == "" {
+		addr = "127.0.0.3:2007"
+	}
+	start := time.Now()
+	conn, err := net.DialTimeout("tcp", addr, 1000*time.Millisecond)
+	if err != nil {
+		return -1
+	}
+	_ = conn.Close()
+	return int(time.Since(start).Milliseconds())
+}
+
+// TestGlobalPing mengukur latensi koneksi internet global ke 1.1.1.1:80 dalam milidetik.
+func TestGlobalPing(target string) int {
+	if target == "" {
+		target = "1.1.1.1:80"
+	}
+	dialer := ProtectedDialer(2)
+	start := time.Now()
+	conn, err := dialer.Dial("tcp", target)
+	if err != nil {
+		return -1
+	}
+	_ = conn.Close()
+	return int(time.Since(start).Milliseconds())
 }

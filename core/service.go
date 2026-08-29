@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"sync"
@@ -13,8 +14,16 @@ import (
 )
 
 const (
-	MaxConcurrentTCP = 128 // Membatasi maksimal koneksi bersamaan agar RAM tidak habis
+	MaxConcurrentTCP = 128
+	BufferSize       = 32 * 1024
 )
+
+var bufferPool = sync.Pool{
+	New: func() any {
+		b := make([]byte, BufferSize)
+		return &b
+	},
+}
 
 type TCPSession struct {
 	clientIP   net.IP
@@ -23,33 +32,33 @@ type TCPSession struct {
 	serverPort uint16
 	clientSeq  uint32
 	serverSeq  uint32
-	socksConn  net.Conn
+	outConn    net.Conn
 	ctx        context.Context
 	cancel     context.CancelFunc
 	closed     atomic.Bool
 }
 
 type VpnEngine struct {
-	tunFd          int
-	tunFile        *os.File
-	socksAddr      string
-	dnsAddr        string
-	useInternalDNS bool
-	relay          *SOCKS5Relay
-	ctx            context.Context
-	cancel         context.CancelFunc
-	wg             sync.WaitGroup
-	running        atomic.Bool
-	writeMu        sync.Mutex
-	sessionMu      sync.RWMutex
-	tcpSession     map[string]*TCPSession
-	semaphore      chan struct{}
+	tunFd         int
+	tunFile       *os.File
+	localListen   string
+	dnsAddr       string
+	ctx           context.Context
+	cancel        context.CancelFunc
+	wg            sync.WaitGroup
+	running       atomic.Bool
+	writeMu       sync.Mutex
+	sessionMu     sync.RWMutex
+	tcpSession    map[string]*TCPSession
+	semaphore     chan struct{}
+	socksListener net.Listener
 }
 
 var globalEngine *VpnEngine
 var engineMutex sync.Mutex
 
-func StartEngine(fd int, socksAddr string, dnsAddr string, useInternalDNS bool) bool {
+// StartEngine menyalakan Monolithic Kernel & SOCKS5 listener internal pada 127.0.0.3:2007.
+func StartEngine(fd int, localSocksAddr string, dnsAddr string) bool {
 	engineMutex.Lock()
 	defer engineMutex.Unlock()
 
@@ -57,31 +66,40 @@ func StartEngine(fd int, socksAddr string, dnsAddr string, useInternalDNS bool) 
 		return true
 	}
 
+	if localSocksAddr == "" {
+		localSocksAddr = "127.0.0.3:2007"
+	}
+	if dnsAddr == "" {
+		dnsAddr = "1.1.1.1"
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	engine := &VpnEngine{
-		tunFd:          fd,
-		socksAddr:      socksAddr,
-		dnsAddr:        dnsAddr,
-		useInternalDNS: useInternalDNS,
-		relay:          NewSOCKS5Relay(socksAddr, 4*time.Second),
-		ctx:            ctx,
-		cancel:         cancel,
-		tcpSession:     make(map[string]*TCPSession),
-		semaphore:      make(chan struct{}, MaxConcurrentTCP),
+		tunFd:       fd,
+		localListen: localSocksAddr,
+		dnsAddr:     dnsAddr,
+		ctx:         ctx,
+		cancel:      cancel,
+		tcpSession:  make(map[string]*TCPSession),
+		semaphore:   make(chan struct{}, MaxConcurrentTCP),
 	}
 
 	engine.tunFile = os.NewFile(uintptr(fd), "tun")
 	if engine.tunFile == nil {
-		AddLog("ERROR", "Invalid TUN descriptor.")
+		AddLog("ERROR", "Failed opening native TUN file.")
 		cancel()
 		return false
 	}
 
+	// 1. Jalankan internal SOCKS5 Server di 127.0.0.3:2007
+	go engine.startEmbeddedSocks5(localSocksAddr)
+
 	engine.running.Store(true)
 	globalEngine = engine
 
-	AddLog("INFO", fmt.Sprintf("Engine Bound to %s [RAM Protection Active]", socksAddr))
+	AddLog("INFO", fmt.Sprintf("Neural Monolith Online. Internal Engine: %s", localSocksAddr))
 
+	// 2. Jalankan loop pembaca TUN
 	engine.wg.Add(1)
 	go engine.readLoop()
 
@@ -96,9 +114,13 @@ func StopEngine() {
 		return
 	}
 
-	AddLog("INFO", "Stopping Engine and freeing RAM...")
+	AddLog("INFO", "Stopping Monolith Engine...")
 	globalEngine.running.Store(false)
 	globalEngine.cancel()
+
+	if globalEngine.socksListener != nil {
+		_ = globalEngine.socksListener.Close()
+	}
 
 	globalEngine.sessionMu.Lock()
 	for _, sess := range globalEngine.tcpSession {
@@ -114,7 +136,7 @@ func StopEngine() {
 
 	globalEngine.wg.Wait()
 	globalEngine = nil
-	AddLog("INFO", "Engine stopped cleanly.")
+	AddLog("INFO", "Monolith Engine stopped cleanly.")
 }
 
 func IsRunning() bool {
@@ -131,7 +153,102 @@ func (e *VpnEngine) writeToTun(packet []byte) {
 	}
 }
 
-// isIgnoredPacket menyaring paket sampah sistem yang memicu error 0x04
+// startEmbeddedSocks5 menjalankan server SOCKS5 bawaan langsung di dalam Go binary kita.
+func (e *VpnEngine) startEmbeddedSocks5(listenAddr string) {
+	var lc net.ListenConfig
+	l, err := lc.Listen(e.ctx, "tcp4", listenAddr)
+	if err != nil {
+		AddLog("WARN", fmt.Sprintf("Embedded SOCKS5 bind note: %v", err))
+		return
+	}
+	e.socksListener = l
+
+	for {
+		conn, err := l.Accept()
+		if err != nil {
+			return
+		}
+		go e.handleSocks5Client(conn)
+	}
+}
+
+func (e *VpnEngine) handleSocks5Client(client net.Conn) {
+	defer client.Close()
+
+	// Handshake
+	buf := make([]byte, 256)
+	if _, err := io.ReadFull(client, buf[:2]); err != nil || buf[0] != 0x05 {
+		return
+	}
+	nMethods := int(buf[1])
+	if _, err := io.ReadFull(client, buf[:nMethods]); err != nil {
+		return
+	}
+	if _, err := client.Write([]byte{0x05, 0x00}); err != nil {
+		return
+	}
+
+	// Request
+	if _, err := io.ReadFull(client, buf[:4]); err != nil || buf[1] != 0x01 {
+		return
+	}
+
+	var targetAddr string
+	switch buf[3] {
+	case 0x01: // IPv4
+		if _, err := io.ReadFull(client, buf[:4]); err != nil {
+			return
+		}
+		targetAddr = net.IP(buf[:4]).String()
+	case 0x03: // Domain
+		if _, err := io.ReadFull(client, buf[:1]); err != nil {
+			return
+		}
+		dLen := int(buf[0])
+		if _, err := io.ReadFull(client, buf[:dLen]); err != nil {
+			return
+		}
+		targetAddr = string(buf[:dLen])
+	default:
+		return
+	}
+
+	portBuf := make([]byte, 2)
+	if _, err := io.ReadFull(client, portBuf); err != nil {
+		return
+	}
+	targetPort := binary.BigEndian.Uint16(portBuf)
+	fullTarget := fmt.Sprintf("%s:%d", targetAddr, targetPort)
+
+	// Dial ke internet global dengan socket yang dilindungi
+	dialer := ProtectedDialer(5)
+	remote, err := dialer.Dial("tcp", fullTarget)
+	if err != nil {
+		_, _ = client.Write([]byte{0x05, 0x04, 0x00, 0x01, 0, 0, 0, 0, 0, 0})
+		return
+	}
+	defer remote.Close()
+
+	// Reply Success
+	if _, err := client.Write([]byte{0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0}); err != nil {
+		return
+	}
+
+	// Relay bi-directional
+	var wg sync.WaitGroup
+	wg.Add(2)
+	pipe := func(dst, src net.Conn) {
+		defer wg.Done()
+		bufPtr := bufferPool.Get().(*[]byte)
+		defer bufferPool.Put(bufPtr)
+		_, _ = io.CopyBuffer(dst, src, *bufPtr)
+		_ = dst.Close()
+	}
+	go pipe(remote, client)
+	go pipe(client, remote)
+	wg.Wait()
+}
+
 func isIgnoredPacket(dstIP net.IP, dstPort uint16) bool {
 	if dstIP == nil || dstIP.IsLoopback() || dstIP.IsMulticast() || dstIP.IsUnspecified() {
 		return true
@@ -139,7 +256,6 @@ func isIgnoredPacket(dstIP net.IP, dstPort uint16) bool {
 	if dstIP.Equal(net.ParseIP("10.10.0.2")) || dstIP.Equal(net.ParseIP("255.255.255.255")) {
 		return true
 	}
-	// Blokir port background Android yang tidak relevan
 	switch dstPort {
 	case 853, 123, 1900, 5353, 137, 138:
 		return true
@@ -180,6 +296,10 @@ func (e *VpnEngine) readLoop() {
 		srcIP := net.IP(packet[12:16])
 		dstIP := net.IP(packet[16:20])
 
+		if isIgnoredPacket(dstIP, 0) {
+			continue
+		}
+
 		switch protocol {
 		case 17: // UDP
 			if n < ihl+8 {
@@ -212,7 +332,7 @@ func (e *VpnEngine) readLoop() {
 			flags := tcpHeader[13]
 
 			if isIgnoredPacket(dstIP, dstPort) {
-				if (flags & 0x02) != 0 { // Balas RST untuk SYN yang diabaikan
+				if (flags & 0x02) != 0 {
 					rstPkt := BuildTCPPacket(dstIP, srcIP, dstPort, srcPort, 0, seq+1, 0x14, nil)
 					e.writeToTun(rstPkt)
 				}
@@ -237,7 +357,7 @@ func (e *VpnEngine) handleDNS(clientIP, serverIP net.IP, clientPort uint16, dnsP
 
 	var responseData []byte
 
-	if dnsInfo.QType == 1 { // A Record (IPv4)
+	if dnsInfo.QType == 1 { // A Record
 		fakeIP := globalFakeDNS.GetOrAllocateFakeIP(dnsInfo.QName)
 		responseData = BuildDNSResponseA(dnsPayload, dnsInfo.ID, fakeIP)
 	} else {
@@ -260,13 +380,11 @@ func (e *VpnEngine) handleTCP(srcIP, dstIP net.IP, srcPort, dstPort uint16, seq,
 
 	if isSyn {
 		e.sessionMu.Lock()
-		// ANTI-LEAK: Jika sesi lama masih ada, abaikan duplicate SYN agar tidak spam goroutine
 		if existing, ok := e.tcpSession[sessionKey]; ok && !existing.closed.Load() {
 			e.sessionMu.Unlock()
 			return
 		}
 
-		// Batasi maksimal goroutine aktif
 		select {
 		case e.semaphore <- struct{}{}:
 		default:
@@ -298,7 +416,8 @@ func (e *VpnEngine) handleTCP(srcIP, dstIP net.IP, srcPort, dstPort uint16, seq,
 		go func() {
 			defer func() { <-e.semaphore }()
 
-			socksConn, err := e.relay.Dial(ctx, targetHost, dstPort)
+			dialer := ProtectedDialer(4)
+			outConn, err := dialer.DialContext(ctx, "tcp", fmt.Sprintf("%s:%d", targetHost, dstPort))
 			if err != nil {
 				e.sessionMu.Lock()
 				delete(e.tcpSession, sessionKey)
@@ -310,8 +429,8 @@ func (e *VpnEngine) handleTCP(srcIP, dstIP net.IP, srcPort, dstPort uint16, seq,
 				return
 			}
 
-			sess.socksConn = socksConn
-			AddLog("TCP", fmt.Sprintf("CONNECTED -> %s:%d", targetHost, dstPort))
+			sess.outConn = outConn
+			AddLog("TCP", fmt.Sprintf("ONLINE -> %s:%d", targetHost, dstPort))
 
 			synAckPkt := BuildTCPPacket(dstIP, srcIP, dstPort, srcPort, sess.serverSeq, sess.clientSeq, 0x12, nil)
 			sess.serverSeq++
@@ -345,9 +464,9 @@ func (e *VpnEngine) handleTCP(srcIP, dstIP net.IP, srcPort, dstPort uint16, seq,
 		return
 	}
 
-	if isAck && len(payload) > 0 && sess.socksConn != nil {
+	if isAck && len(payload) > 0 && sess.outConn != nil {
 		sess.clientSeq = seq + uint32(len(payload))
-		_, _ = sess.socksConn.Write(payload)
+		_, _ = sess.outConn.Write(payload)
 
 		ackPkt := BuildTCPPacket(dstIP, srcIP, dstPort, srcPort, sess.serverSeq, sess.clientSeq, 0x10, nil)
 		e.writeToTun(ackPkt)
@@ -373,11 +492,11 @@ func (s *TCPSession) forwardDownstream(engine *VpnEngine, sessionKey string) {
 		default:
 		}
 
-		if s.socksConn == nil {
+		if s.outConn == nil {
 			return
 		}
 
-		n, err := s.socksConn.Read(buf)
+		n, err := s.outConn.Read(buf)
 		if err != nil || n == 0 {
 			finPkt := BuildTCPPacket(s.serverIP, s.clientIP, s.serverPort, s.clientPort, s.serverSeq, s.clientSeq, 0x11, nil)
 			engine.writeToTun(finPkt)
@@ -402,8 +521,8 @@ func (s *TCPSession) forwardDownstream(engine *VpnEngine, sessionKey string) {
 func (s *TCPSession) close() {
 	if s.closed.CompareAndSwap(false, true) {
 		s.cancel()
-		if s.socksConn != nil {
-			_ = s.socksConn.Close()
+		if s.outConn != nil {
+			_ = s.outConn.Close()
 		}
 	}
 }
