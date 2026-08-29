@@ -48,9 +48,7 @@ public class MainActivity extends AppCompatActivity {
     private EditText etSocksHost;
     private EditText etSocksPort;
     private SwitchCompat switchUseInternalDns;
-    private EditText etDnsAddr;
-    private SwitchCompat switchBypassTermux;
-    private EditText etCustomBypass;
+    private EditText etTargetPackages;
     private Button btnToggleVpn;
 
     private Button btnPresetTermux2007;
@@ -76,7 +74,7 @@ public class MainActivity extends AppCompatActivity {
                 if (result.getResultCode() == RESULT_OK) {
                     startVpnService();
                 } else {
-                    Toast.makeText(this, "VPN permission denied by user", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this, "VPN permission denied", Toast.LENGTH_SHORT).show();
                 }
             });
 
@@ -107,8 +105,7 @@ public class MainActivity extends AppCompatActivity {
             requestSystemPermissions();
             startLogPoller();
         } catch (Throwable t) {
-            Log.e(TAG, "Fatal error on onCreate: ", t);
-            Toast.makeText(this, "Startup error: " + t.getMessage(), Toast.LENGTH_LONG).show();
+            Log.e(TAG, "Startup Error: ", t);
         }
     }
 
@@ -125,9 +122,7 @@ public class MainActivity extends AppCompatActivity {
         etSocksHost = findViewById(R.id.et_socks_host);
         etSocksPort = findViewById(R.id.et_socks_port);
         switchUseInternalDns = findViewById(R.id.switch_use_internal_dns);
-        etDnsAddr = findViewById(R.id.et_dns_addr);
-        switchBypassTermux = findViewById(R.id.switch_bypass_termux);
-        etCustomBypass = findViewById(R.id.et_custom_bypass);
+        etTargetPackages = findViewById(R.id.et_target_packages);
         btnToggleVpn = findViewById(R.id.btn_toggle_vpn);
 
         btnPresetTermux2007 = findViewById(R.id.btn_preset_termux_2007);
@@ -154,12 +149,8 @@ public class MainActivity extends AppCompatActivity {
     private void loadSavedPreferences() {
         etSocksHost.setText(prefs.getString("socks_host", "127.0.0.3"));
         etSocksPort.setText(prefs.getString("socks_port", "2007"));
-        boolean useInternal = prefs.getBoolean("use_internal_dns", true);
-        switchUseInternalDns.setChecked(useInternal);
-        etDnsAddr.setVisibility(useInternal ? View.GONE : View.VISIBLE);
-        etDnsAddr.setText(prefs.getString("dns_addr", "1.1.1.1"));
-        switchBypassTermux.setChecked(prefs.getBoolean("bypass_termux", true));
-        etCustomBypass.setText(prefs.getString("custom_bypass", ""));
+        switchUseInternalDns.setChecked(prefs.getBoolean("use_internal_dns", true));
+        etTargetPackages.setText(prefs.getString("target_packages", "com.android.chrome, com.google.android.youtube, org.telegram.messenger"));
     }
 
     private void savePreferences() {
@@ -167,9 +158,7 @@ public class MainActivity extends AppCompatActivity {
                 .putString("socks_host", etSocksHost.getText().toString().trim())
                 .putString("socks_port", etSocksPort.getText().toString().trim())
                 .putBoolean("use_internal_dns", switchUseInternalDns.isChecked())
-                .putString("dns_addr", etDnsAddr.getText().toString().trim())
-                .putBoolean("bypass_termux", switchBypassTermux.isChecked())
-                .putString("custom_bypass", etCustomBypass.getText().toString().trim())
+                .putString("target_packages", etTargetPackages.getText().toString().trim())
                 .apply();
     }
 
@@ -191,24 +180,16 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setupActions() {
-        switchUseInternalDns.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            etDnsAddr.setVisibility(isChecked ? View.GONE : View.VISIBLE);
-        });
-
         btnPresetTermux2007.setOnClickListener(v -> {
             etSocksHost.setText("127.0.0.3");
             etSocksPort.setText("2007");
-            switchUseInternalDns.setChecked(true);
-            switchBypassTermux.setChecked(true);
-            Toast.makeText(this, "Preset 127.0.0.3:2007 + Proxy AI DNS Applied", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "Preset 127.0.0.3:2007 Set", Toast.LENGTH_SHORT).show();
         });
 
         btnPresetTermux10808.setOnClickListener(v -> {
             etSocksHost.setText("127.0.0.1");
             etSocksPort.setText("10808");
-            switchUseInternalDns.setChecked(true);
-            switchBypassTermux.setChecked(true);
-            Toast.makeText(this, "Preset 127.0.0.1:10808 Applied", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "Preset 127.0.0.1:10808 Set", Toast.LENGTH_SHORT).show();
         });
 
         btnToggleVpn.setOnClickListener(v -> {
@@ -236,8 +217,8 @@ public class MainActivity extends AppCompatActivity {
                 Core.loadRules("");
             } catch (Throwable ignored) {}
             tvRulesStats.setText("Rules Loaded: 0");
-            tvRulesContent.setText("No rules active. All traffic will route to SOCKS5 proxy default.");
-            Toast.makeText(this, "Routing rules cleared", Toast.LENGTH_SHORT).show();
+            tvRulesContent.setText("No rules active. All traffic routes to SOCKS5.");
+            Toast.makeText(this, "Rules cleared", Toast.LENGTH_SHORT).show();
         });
 
         btnClearLogs.setOnClickListener(v -> tvLogsConsole.setText(""));
@@ -248,7 +229,7 @@ public class MainActivity extends AppCompatActivity {
                 ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
                 ClipData clip = ClipData.newPlainText("NeuralVPN Logs", logs);
                 clipboard.setPrimaryClip(clip);
-                Toast.makeText(this, "Logs copied to clipboard", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "Logs copied", Toast.LENGTH_SHORT).show();
             }
         });
     }
@@ -269,9 +250,7 @@ public class MainActivity extends AppCompatActivity {
         String host = etSocksHost.getText().toString().trim();
         String portStr = etSocksPort.getText().toString().trim();
         boolean useInternalDns = switchUseInternalDns.isChecked();
-        String dns = etDnsAddr.getText().toString().trim();
-        boolean bypassTermux = switchBypassTermux.isChecked();
-        String customBypass = etCustomBypass.getText().toString().trim();
+        String targetPackages = etTargetPackages.getText().toString().trim();
 
         int port = 2007;
         try {
@@ -282,10 +261,8 @@ public class MainActivity extends AppCompatActivity {
         serviceIntent.setAction(NeuralVpnService.ACTION_START);
         serviceIntent.putExtra(NeuralVpnService.EXTRA_SOCKS_HOST, host);
         serviceIntent.putExtra(NeuralVpnService.EXTRA_SOCKS_PORT, port);
-        serviceIntent.putExtra(NeuralVpnService.EXTRA_DNS_ADDR, dns);
         serviceIntent.putExtra(NeuralVpnService.EXTRA_USE_INTERNAL_DNS, useInternalDns);
-        serviceIntent.putExtra(NeuralVpnService.EXTRA_BYPASS_TERMUX, bypassTermux);
-        serviceIntent.putExtra(NeuralVpnService.EXTRA_CUSTOM_BYPASS, customBypass);
+        serviceIntent.putExtra(NeuralVpnService.EXTRA_TARGET_PACKAGES, targetPackages);
 
         ContextCompat.startForegroundService(this, serviceIntent);
         updateVpnUiState(true);
@@ -325,9 +302,9 @@ public class MainActivity extends AppCompatActivity {
             long count = Core.loadRules(content);
             tvRulesStats.setText("Rules Loaded: " + count);
             tvRulesContent.setText(content);
-            Toast.makeText(this, "Imported " + count + " rules successfully", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "Imported " + count + " rules", Toast.LENGTH_SHORT).show();
         } catch (Exception e) {
-            Toast.makeText(this, "Failed loading file: " + e.getMessage(), Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "Load failed: " + e.getMessage(), Toast.LENGTH_LONG).show();
         }
     }
 

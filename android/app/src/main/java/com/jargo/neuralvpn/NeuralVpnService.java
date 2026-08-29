@@ -26,8 +26,7 @@ public class NeuralVpnService extends VpnService implements SocketProtector {
     public static final String EXTRA_SOCKS_PORT = "EXTRA_SOCKS_PORT";
     public static final String EXTRA_DNS_ADDR = "EXTRA_DNS_ADDR";
     public static final String EXTRA_USE_INTERNAL_DNS = "EXTRA_USE_INTERNAL_DNS";
-    public static final String EXTRA_BYPASS_TERMUX = "EXTRA_BYPASS_TERMUX";
-    public static final String EXTRA_CUSTOM_BYPASS = "EXTRA_CUSTOM_BYPASS";
+    public static final String EXTRA_TARGET_PACKAGES = "EXTRA_TARGET_PACKAGES"; // Whitelist Mode
 
     private static final String CHANNEL_ID = "neural_vpn_channel";
     private static final int NOTIFICATION_ID = 9001;
@@ -63,8 +62,7 @@ public class NeuralVpnService extends VpnService implements SocketProtector {
             int socksPort = intent.getIntExtra(EXTRA_SOCKS_PORT, 2007);
             String dnsAddr = intent.getStringExtra(EXTRA_DNS_ADDR);
             boolean useInternalDns = intent.getBooleanExtra(EXTRA_USE_INTERNAL_DNS, true);
-            boolean bypassTermux = intent.getBooleanExtra(EXTRA_BYPASS_TERMUX, true);
-            String customBypass = intent.getStringExtra(EXTRA_CUSTOM_BYPASS);
+            String targetPackages = intent.getStringExtra(EXTRA_TARGET_PACKAGES);
 
             if (socksHost == null || socksHost.isEmpty()) {
                 socksHost = "127.0.0.3";
@@ -78,15 +76,14 @@ public class NeuralVpnService extends VpnService implements SocketProtector {
 
             startForegroundNotification(useInternalDns);
 
-            executor.execute(() -> launchEngine(fullSocks, finalDns, useInternalDns, bypassTermux, customBypass));
+            executor.execute(() -> launchEngine(fullSocks, finalDns, useInternalDns, targetPackages));
         }
 
         return START_STICKY;
     }
 
-    private synchronized void launchEngine(String socksAddr, String dnsAddr, boolean useInternalDns, boolean bypassTermux, String customBypass) {
+    private synchronized void launchEngine(String socksAddr, String dnsAddr, boolean useInternalDns, String targetPackages) {
         if (vpnInterface != null) {
-            Core.addLog("WARN", "Tunnel interface already active.");
             return;
         }
 
@@ -99,13 +96,29 @@ public class NeuralVpnService extends VpnService implements SocketProtector {
                     .addDnsServer(useInternalDns ? "10.10.0.2" : dnsAddr)
                     .setBlocking(true);
 
-            // Bypass aplikasi VPN sendiri
-            try {
-                builder.addDisallowedApplication(getPackageName());
-            } catch (PackageManager.NameNotFoundException ignored) {}
+            // MODE 1: WHITELIST MODE (Hanya Proxy Aplikasi yang Dipilih - 100% Anti-Loop Bebas Crash)
+            if (targetPackages != null && !targetPackages.trim().isEmpty()) {
+                String[] pkgs = targetPackages.split("[,;\\n\\s]+");
+                int added = 0;
+                for (String pkg : pkgs) {
+                    String clean = pkg.trim();
+                    if (!clean.isEmpty()) {
+                        try {
+                            builder.addAllowedApplication(clean);
+                            added++;
+                            Core.addLog("INFO", "Proxy Target: " + clean);
+                        } catch (PackageManager.NameNotFoundException ignored) {}
+                    }
+                }
+                if (added > 0) {
+                    Core.addLog("INFO", String.format("Whitelist Mode Active (%d apps proxied, Termux safely excluded)", added));
+                }
+            } else {
+                // MODE 2: GLOBAL MODE (Bypass Termux)
+                try {
+                    builder.addDisallowedApplication(getPackageName());
+                } catch (PackageManager.NameNotFoundException ignored) {}
 
-            // Auto-Bypass Termux & Injector Tunneling
-            if (bypassTermux) {
                 PackageManager pm = getPackageManager();
                 List<ApplicationInfo> installedApps = pm.getInstalledApplications(PackageManager.GET_META_DATA);
                 for (ApplicationInfo app : installedApps) {
@@ -113,46 +126,29 @@ public class NeuralVpnService extends VpnService implements SocketProtector {
                     if (pkg.contains("termux") || pkg.contains("injector") || pkg.contains("httpcustom") || pkg.contains("netmod") || pkg.contains("v2ray")) {
                         try {
                             builder.addDisallowedApplication(app.packageName);
-                            Core.addLog("INFO", "Anti-Loop Bypassed: " + app.packageName);
                         } catch (PackageManager.NameNotFoundException ignored) {}
-                    }
-                }
-            }
-
-            // Bypass package kustom
-            if (customBypass != null && !customBypass.trim().isEmpty()) {
-                String[] extraPackages = customBypass.split("[,;\\n]+");
-                for (String extraPkg : extraPackages) {
-                    String cleanPkg = extraPkg.trim();
-                    if (!cleanPkg.isEmpty()) {
-                        try {
-                            builder.addDisallowedApplication(cleanPkg);
-                            Core.addLog("INFO", "Custom Bypassed: " + cleanPkg);
-                        } catch (PackageManager.NameNotFoundException e) {
-                            Core.addLog("WARN", "Package not found: " + cleanPkg);
-                        }
                     }
                 }
             }
 
             vpnInterface = builder.establish();
             if (vpnInterface == null) {
-                Core.addLog("ERROR", "Failed to establish Android VPN interface.");
+                Core.addLog("ERROR", "Failed to establish VPN interface.");
                 stopSelf();
                 return;
             }
 
             int fd = vpnInterface.detachFd();
-            Core.addLog("INFO", "Native TUN bound on FD " + fd + ". Upstream: " + socksAddr);
+            Core.addLog("INFO", "TUN Bound. Forwarding to " + socksAddr);
 
             boolean success = Core.startEngine(fd, socksAddr, dnsAddr, useInternalDns);
             if (!success) {
-                Core.addLog("ERROR", "Go Kernel start failed.");
+                Core.addLog("ERROR", "Go Kernel rejected parameters.");
                 shutdownVpn();
             }
 
         } catch (Exception e) {
-            Core.addLog("ERROR", "Fatal exception in VpnService: " + e.getMessage());
+            Core.addLog("ERROR", "Setup Error: " + e.getMessage());
             shutdownVpn();
         }
     }
@@ -167,7 +163,7 @@ public class NeuralVpnService extends VpnService implements SocketProtector {
                     "Neural VPN Active Service",
                     NotificationManager.IMPORTANCE_LOW
             );
-            channel.setDescription("GoMobile TUN SOCKS5 Kernel");
+            channel.setDescription("Neural VPN Micro-Kernel");
             manager.createNotificationChannel(channel);
         }
 
@@ -182,11 +178,9 @@ public class NeuralVpnService extends VpnService implements SocketProtector {
                 this, 0, activityIntent, PendingIntent.FLAG_IMMUTABLE
         );
 
-        String desc = internalDns ? "Proxy Internal AI DNS Active" : "Custom DNS Active";
-
         Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle("Neural VPN Active")
-                .setContentText(desc)
+                .setContentText("Micro-Kernel Protected (RAM Safe)")
                 .setSmallIcon(android.R.drawable.ic_lock_lock)
                 .setContentIntent(activityPendingIntent)
                 .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Disconnect", stopPendingIntent)
@@ -198,7 +192,6 @@ public class NeuralVpnService extends VpnService implements SocketProtector {
     }
 
     private synchronized void shutdownVpn() {
-        Core.addLog("INFO", "Shutting down VPN interface...");
         Core.stopEngine();
 
         if (vpnInterface != null) {
@@ -221,7 +214,6 @@ public class NeuralVpnService extends VpnService implements SocketProtector {
 
     @Override
     public void onRevoke() {
-        Core.addLog("WARN", "VPN credentials revoked.");
         shutdownVpn();
         super.onRevoke();
     }

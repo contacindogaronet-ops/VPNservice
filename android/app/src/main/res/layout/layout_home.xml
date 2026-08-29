@@ -48,11 +48,11 @@
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 
-        <!-- Quick Presets -->
+        <!-- Presets -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="QUICK LOCAL PRESETS"
+            android:text="LOCAL PRESETS"
             android:textColor="#64748B"
             android:textSize="11sp"
             android:textStyle="bold"
@@ -90,11 +90,11 @@
                 android:layout_marginStart="6dp" />
         </LinearLayout>
 
-        <!-- Configuration Inputs -->
+        <!-- SOCKS5 Host & Port -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="SOCKS5 LOCAL HOST / PORT"
+            android:text="SOCKS5 PROXY CONFIG"
             android:textColor="#64748B"
             android:textSize="11sp"
             android:textStyle="bold"
@@ -130,7 +130,7 @@
             android:layout_marginBottom="14dp"
             android:singleLine="true" />
 
-        <!-- AI DNS Card Switch -->
+        <!-- App Whitelist Selection (Anti-Loop Guarantee) -->
         <androidx.cardview.widget.CardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -149,34 +149,41 @@
                     android:id="@+id/switch_use_internal_dns"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Gunakan Proxy AI DNS (Tanpa DNS Luar)"
+                    android:text="Proxy AI DNS (Tanpa DNS Luar)"
                     android:textColor="#F8FAFC"
                     android:textSize="12sp"
                     android:textStyle="bold"
                     android:checked="true" />
 
                 <TextView
-                    android:layout_width="match_parent"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="DNS 100% di-resolve oleh Termux/Proxy Anda sendiri."
-                    android:textColor="#10B981"
+                    android:text="TARGET APLIKASI (WHITELIST BEBAS LOOP)"
+                    android:textColor="#38BDF8"
                     android:textSize="10sp"
-                    android:layout_marginTop="2dp" />
+                    android:textStyle="bold"
+                    android:letterSpacing="0.08"
+                    android:layout_marginTop="14dp"
+                    android:layout_marginBottom="4dp" />
 
                 <EditText
-                    android:id="@+id/et_dns_addr"
+                    android:id="@+id/et_target_packages"
                     android:layout_width="match_parent"
-                    android:layout_height="46dp"
+                    android:layout_height="60dp"
                     android:background="#090D16"
-                    android:hint="Custom DNS (e.g. 1.1.1.1)"
+                    android:hint="com.android.chrome, com.google.android.youtube, org.telegram.messenger"
                     android:textColorHint="#475569"
                     android:textColor="#F8FAFC"
-                    android:paddingStart="12dp"
-                    android:paddingEnd="12dp"
-                    android:textSize="12sp"
-                    android:layout_marginTop="10dp"
-                    android:singleLine="true"
-                    android:visibility="gone" />
+                    android:padding="10dp"
+                    android:textSize="11sp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Hanya aplikasi di atas yang ditarik ke VPN. Termux dan sistem dijamin 100% bebas dari loop/crash."
+                    android:textColor="#64748B"
+                    android:textSize="10sp"
+                    android:layout_marginTop="6dp" />
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 

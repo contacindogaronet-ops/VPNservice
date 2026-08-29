@@ -30,17 +30,27 @@ var (
 		ipRules:     make(map[string]RuleAction),
 	}
 
-	logMutex  sync.Mutex
-	logQueue  []string
-	maxLogCap = 2000
+	logMutex    sync.Mutex
+	logQueue    []string
+	maxLogCap   = 200 // Dibatasi ketat agar RAM tidak membengkak
+	lastLogTime time.Time
+	lastLogMsg  string
 )
 
-// AddLog registers an event into the thread-safe ring buffer.
+// AddLog menyaring log duplikat dan membatasi ukuran memori log.
 func AddLog(level string, message string) {
 	logMutex.Lock()
 	defer logMutex.Unlock()
 
-	timestamp := time.Now().Format("15:04:05.000")
+	now := time.Now()
+	// Anti-Flood: Jangan catat pesan error yang sama persis dalam rentang 1 detik
+	if message == lastLogMsg && now.Sub(lastLogTime) < 1*time.Second {
+		return
+	}
+	lastLogMsg = message
+	lastLogTime = now
+
+	timestamp := now.Format("15:04:05")
 	formatted := fmt.Sprintf("[%s] [%s] %s", timestamp, strings.ToUpper(level), message)
 
 	if len(logQueue) >= maxLogCap {
@@ -49,7 +59,6 @@ func AddLog(level string, message string) {
 	logQueue = append(logQueue, formatted)
 }
 
-// PullLogs extracts and drains all pending logs for the UI consumer.
 func PullLogs() string {
 	logMutex.Lock()
 	defer logMutex.Unlock()
@@ -69,8 +78,6 @@ func PullLogs() string {
 	return sb.String()
 }
 
-// LoadRules parses rule definition strings line-by-line.
-// Format: RULE-TYPE,PAYLOAD,ACTION (e.g. DOMAIN-SUFFIX,google.com,PROXY or IP-CIDR,192.168.1.1/32,DIRECT)
 func LoadRules(ruleContent string) int {
 	globalRuleEngine.mu.Lock()
 	defer globalRuleEngine.mu.Unlock()
@@ -102,8 +109,6 @@ func LoadRules(ruleContent string) int {
 			action = ActionDirect
 		case "BLOCK":
 			action = ActionBlock
-		case "PROXY":
-			action = ActionProxy
 		default:
 			action = ActionProxy
 		}
@@ -119,11 +124,10 @@ func LoadRules(ruleContent string) int {
 	}
 
 	atomic.StoreInt32(&globalRuleEngine.ruleCount, int32(count))
-	AddLog("INFO", fmt.Sprintf("Successfully compiled and loaded %d routing rules", count))
+	AddLog("INFO", fmt.Sprintf("Loaded %d routing rules", count))
 	return count
 }
 
-// MatchDomain evaluates domain routing rules with suffix matching support.
 func MatchDomain(domain string) RuleAction {
 	globalRuleEngine.mu.RLock()
 	defer globalRuleEngine.mu.RUnlock()
@@ -142,18 +146,6 @@ func MatchDomain(domain string) RuleAction {
 	return ActionProxy
 }
 
-// MatchIP evaluates direct IP routing actions.
-func MatchIP(ipStr string) RuleAction {
-	globalRuleEngine.mu.RLock()
-	defer globalRuleEngine.mu.RUnlock()
-
-	if action, exists := globalRuleEngine.ipRules[ipStr]; exists {
-		return action
-	}
-	return ActionProxy
-}
-
-// GetLoadedRulesCount returns the current active rule count.
 func GetLoadedRulesCount() int {
 	return int(atomic.LoadInt32(&globalRuleEngine.ruleCount))
 }

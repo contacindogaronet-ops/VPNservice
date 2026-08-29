@@ -12,6 +12,10 @@ import (
 	"time"
 )
 
+const (
+	MaxConcurrentTCP = 128 // Membatasi maksimal koneksi bersamaan agar RAM tidak habis
+)
+
 type TCPSession struct {
 	clientIP   net.IP
 	serverIP   net.IP
@@ -39,6 +43,7 @@ type VpnEngine struct {
 	writeMu        sync.Mutex
 	sessionMu      sync.RWMutex
 	tcpSession     map[string]*TCPSession
+	semaphore      chan struct{}
 }
 
 var globalEngine *VpnEngine
@@ -49,7 +54,6 @@ func StartEngine(fd int, socksAddr string, dnsAddr string, useInternalDNS bool) 
 	defer engineMutex.Unlock()
 
 	if globalEngine != nil && globalEngine.running.Load() {
-		AddLog("WARN", "VPN Kernel is already running.")
 		return true
 	}
 
@@ -59,10 +63,11 @@ func StartEngine(fd int, socksAddr string, dnsAddr string, useInternalDNS bool) 
 		socksAddr:      socksAddr,
 		dnsAddr:        dnsAddr,
 		useInternalDNS: useInternalDNS,
-		relay:          NewSOCKS5Relay(socksAddr, 8*time.Second),
+		relay:          NewSOCKS5Relay(socksAddr, 4*time.Second),
 		ctx:            ctx,
 		cancel:         cancel,
 		tcpSession:     make(map[string]*TCPSession),
+		semaphore:      make(chan struct{}, MaxConcurrentTCP),
 	}
 
 	engine.tunFile = os.NewFile(uintptr(fd), "tun")
@@ -75,11 +80,7 @@ func StartEngine(fd int, socksAddr string, dnsAddr string, useInternalDNS bool) 
 	engine.running.Store(true)
 	globalEngine = engine
 
-	if useInternalDNS {
-		AddLog("INFO", fmt.Sprintf("Kernel Active: [Proxy AI DNS Mode Active - Zero External DNS] Upstream: %s", socksAddr))
-	} else {
-		AddLog("INFO", fmt.Sprintf("Kernel Active: [Custom DNS Mode: %s] Upstream: %s", dnsAddr, socksAddr))
-	}
+	AddLog("INFO", fmt.Sprintf("Engine Bound to %s [RAM Protection Active]", socksAddr))
 
 	engine.wg.Add(1)
 	go engine.readLoop()
@@ -95,7 +96,7 @@ func StopEngine() {
 		return
 	}
 
-	AddLog("INFO", "Stopping VPN Kernel Engine...")
+	AddLog("INFO", "Stopping Engine and freeing RAM...")
 	globalEngine.running.Store(false)
 	globalEngine.cancel()
 
@@ -113,7 +114,7 @@ func StopEngine() {
 
 	globalEngine.wg.Wait()
 	globalEngine = nil
-	AddLog("INFO", "VPN Kernel stopped completely.")
+	AddLog("INFO", "Engine stopped cleanly.")
 }
 
 func IsRunning() bool {
@@ -130,14 +131,17 @@ func (e *VpnEngine) writeToTun(packet []byte) {
 	}
 }
 
-func isUnroutableIP(ip net.IP) bool {
-	if ip == nil {
+// isIgnoredPacket menyaring paket sampah sistem yang memicu error 0x04
+func isIgnoredPacket(dstIP net.IP, dstPort uint16) bool {
+	if dstIP == nil || dstIP.IsLoopback() || dstIP.IsMulticast() || dstIP.IsUnspecified() {
 		return true
 	}
-	if ip.IsLoopback() || ip.IsMulticast() || ip.IsUnspecified() {
+	if dstIP.Equal(net.ParseIP("10.10.0.2")) || dstIP.Equal(net.ParseIP("255.255.255.255")) {
 		return true
 	}
-	if ip.Equal(net.ParseIP("10.10.0.2")) || ip.Equal(net.ParseIP("255.255.255.255")) {
+	// Blokir port background Android yang tidak relevan
+	switch dstPort {
+	case 853, 123, 1900, 5353, 137, 138:
 		return true
 	}
 	return false
@@ -164,7 +168,7 @@ func (e *VpnEngine) readLoop() {
 
 		packet := buf[:n]
 		if packet[0]>>4 != 4 {
-			continue // IPv4 only
+			continue
 		}
 
 		ihl := int(packet[0]&0x0F) * 4
@@ -175,10 +179,6 @@ func (e *VpnEngine) readLoop() {
 		protocol := packet[9]
 		srcIP := net.IP(packet[12:16])
 		dstIP := net.IP(packet[16:20])
-
-		if isUnroutableIP(dstIP) {
-			continue
-		}
 
 		switch protocol {
 		case 17: // UDP
@@ -196,7 +196,7 @@ func (e *VpnEngine) readLoop() {
 			payload := packet[ihl+8 : ihl+int(udpLen)]
 
 			if dstPort == 53 {
-				e.handleDNS_ProxyInternal(srcIP, dstIP, srcPort, payload)
+				e.handleDNS(srcIP, dstIP, srcPort, payload)
 			}
 
 		case 6: // TCP
@@ -211,16 +211,17 @@ func (e *VpnEngine) readLoop() {
 			dataOffset := int(tcpHeader[12]>>4) * 4
 			flags := tcpHeader[13]
 
+			if isIgnoredPacket(dstIP, dstPort) {
+				if (flags & 0x02) != 0 { // Balas RST untuk SYN yang diabaikan
+					rstPkt := BuildTCPPacket(dstIP, srcIP, dstPort, srcPort, 0, seq+1, 0x14, nil)
+					e.writeToTun(rstPkt)
+				}
+				continue
+			}
+
 			var payload []byte
 			if n > ihl+dataOffset {
 				payload = packet[ihl+dataOffset:]
-			}
-
-			// Reject DoT (Port 853) agar sistem langsung menggunakan DNS Proxy
-			if dstPort == 853 {
-				rstPkt := BuildTCPPacket(dstIP, srcIP, dstPort, srcPort, 0, seq+1, 0x14, nil)
-				e.writeToTun(rstPkt)
-				continue
 			}
 
 			e.handleTCP(srcIP, dstIP, srcPort, dstPort, seq, ack, flags, payload)
@@ -228,8 +229,7 @@ func (e *VpnEngine) readLoop() {
 	}
 }
 
-// handleDNS_ProxyInternal merespons DNS lokal tanpa pernah menghubungi DNS server luar (0ms).
-func (e *VpnEngine) handleDNS_ProxyInternal(clientIP, serverIP net.IP, clientPort uint16, dnsPayload []byte) {
+func (e *VpnEngine) handleDNS(clientIP, serverIP net.IP, clientPort uint16, dnsPayload []byte) {
 	dnsInfo, err := ParseDNSQuery(dnsPayload)
 	if err != nil || dnsInfo == nil || dnsInfo.QName == "" {
 		return
@@ -240,7 +240,6 @@ func (e *VpnEngine) handleDNS_ProxyInternal(clientIP, serverIP net.IP, clientPor
 	if dnsInfo.QType == 1 { // A Record (IPv4)
 		fakeIP := globalFakeDNS.GetOrAllocateFakeIP(dnsInfo.QName)
 		responseData = BuildDNSResponseA(dnsPayload, dnsInfo.ID, fakeIP)
-		AddLog("DNS", fmt.Sprintf("[Proxy AI DNS] Mapped %s -> %s", dnsInfo.QName, fakeIP.String()))
 	} else {
 		responseData = BuildDNSResponseEmpty(dnsPayload)
 	}
@@ -260,6 +259,23 @@ func (e *VpnEngine) handleTCP(srcIP, dstIP net.IP, srcPort, dstPort uint16, seq,
 	isAck := (flags & 0x10) != 0
 
 	if isSyn {
+		e.sessionMu.Lock()
+		// ANTI-LEAK: Jika sesi lama masih ada, abaikan duplicate SYN agar tidak spam goroutine
+		if existing, ok := e.tcpSession[sessionKey]; ok && !existing.closed.Load() {
+			e.sessionMu.Unlock()
+			return
+		}
+
+		// Batasi maksimal goroutine aktif
+		select {
+		case e.semaphore <- struct{}{}:
+		default:
+			e.sessionMu.Unlock()
+			rstPkt := BuildTCPPacket(dstIP, srcIP, dstPort, srcPort, 0, seq+1, 0x14, nil)
+			e.writeToTun(rstPkt)
+			return
+		}
+
 		ctx, cancel := context.WithCancel(e.ctx)
 		sess := &TCPSession{
 			clientIP:   srcIP,
@@ -271,36 +287,37 @@ func (e *VpnEngine) handleTCP(srcIP, dstIP net.IP, srcPort, dstPort uint16, seq,
 			ctx:        ctx,
 			cancel:     cancel,
 		}
-
-		e.sessionMu.Lock()
 		e.tcpSession[sessionKey] = sess
 		e.sessionMu.Unlock()
 
-		// Ambil nama Domain asli agar Proxy AI Termux me-resolve secara internal
 		targetHost := dstIP.String()
 		if domain, isFake := globalFakeDNS.GetDomainByFakeIP(dstIP); isFake {
 			targetHost = domain
 		}
 
 		go func() {
+			defer func() { <-e.semaphore }()
+
 			socksConn, err := e.relay.Dial(ctx, targetHost, dstPort)
 			if err != nil {
-				AddLog("WARN", fmt.Sprintf("Proxy Connect Failed (%s:%d): %v", targetHost, dstPort, err))
+				e.sessionMu.Lock()
+				delete(e.tcpSession, sessionKey)
+				e.sessionMu.Unlock()
+				sess.close()
+
 				rstPkt := BuildTCPPacket(dstIP, srcIP, dstPort, srcPort, 0, seq+1, 0x14, nil)
 				e.writeToTun(rstPkt)
-				sess.close()
 				return
 			}
 
 			sess.socksConn = socksConn
-			AddLog("TCP", fmt.Sprintf("ESTABLISHED -> %s:%d [AI DNS Resolved]", targetHost, dstPort))
+			AddLog("TCP", fmt.Sprintf("CONNECTED -> %s:%d", targetHost, dstPort))
 
-			// Kirim SYN-ACK kembali ke Android OS
 			synAckPkt := BuildTCPPacket(dstIP, srcIP, dstPort, srcPort, sess.serverSeq, sess.clientSeq, 0x12, nil)
 			sess.serverSeq++
 			e.writeToTun(synAckPkt)
 
-			go sess.forwardDownstream(e)
+			go sess.forwardDownstream(e, sessionKey)
 		}()
 		return
 	}
@@ -318,7 +335,11 @@ func (e *VpnEngine) handleTCP(srcIP, dstIP net.IP, srcPort, dstPort uint16, seq,
 	}
 
 	if isRst || isFin {
+		e.sessionMu.Lock()
+		delete(e.tcpSession, sessionKey)
+		e.sessionMu.Unlock()
 		sess.close()
+
 		finAck := BuildTCPPacket(dstIP, srcIP, dstPort, srcPort, sess.serverSeq, seq+1, 0x11, nil)
 		e.writeToTun(finAck)
 		return
@@ -333,8 +354,14 @@ func (e *VpnEngine) handleTCP(srcIP, dstIP net.IP, srcPort, dstPort uint16, seq,
 	}
 }
 
-func (s *TCPSession) forwardDownstream(engine *VpnEngine) {
-	defer s.close()
+func (s *TCPSession) forwardDownstream(engine *VpnEngine, sessionKey string) {
+	defer func() {
+		engine.sessionMu.Lock()
+		delete(engine.tcpSession, sessionKey)
+		engine.sessionMu.Unlock()
+		s.close()
+	}()
+
 	bufPtr := bufferPool.Get().(*[]byte)
 	defer bufferPool.Put(bufPtr)
 	buf := *bufPtr
