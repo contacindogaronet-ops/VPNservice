@@ -5,6 +5,7 @@ import (
 	"net"
 	"strings"
 	"syscall"
+	"time"
 )
 
 type SocketProtector interface {
@@ -34,8 +35,11 @@ func isLoopback(address string) bool {
 }
 
 func ProtectedDialer(timeoutSec int) *net.Dialer {
+	if timeoutSec <= 0 {
+		timeoutSec = 5
+	}
 	return &net.Dialer{
-		Timeout: timeDuration(timeoutSec),
+		Timeout: time.Duration(timeoutSec) * time.Second,
 		Control: func(network, address string, c syscall.RawConn) error {
 			if isLoopback(address) {
 				return nil
@@ -67,8 +71,4 @@ func ProtectedListenUDP(ctx context.Context) (*net.UDPConn, error) {
 		return nil, err
 	}
 	return conn.(*net.UDPConn), nil
-}
-
-func timeDuration(sec int) net.Addr {
-	return nil
 }

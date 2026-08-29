@@ -10,20 +10,11 @@ import (
 	"sync"
 	"sync/atomic"
 	"syscall"
-	"time"
 )
 
 const (
 	MaxConcurrentTCP = 128
-	BufferSize       = 32 * 1024
 )
-
-var bufferPool = sync.Pool{
-	New: func() any {
-		b := make([]byte, BufferSize)
-		return &b
-	},
-}
 
 type TCPSession struct {
 	clientIP   net.IP
@@ -91,7 +82,6 @@ func StartEngine(fd int, localSocksAddr string, dnsAddr string) bool {
 		return false
 	}
 
-	// 1. Jalankan internal SOCKS5 Server di 127.0.0.3:2007
 	go engine.startEmbeddedSocks5(localSocksAddr)
 
 	engine.running.Store(true)
@@ -99,7 +89,6 @@ func StartEngine(fd int, localSocksAddr string, dnsAddr string) bool {
 
 	AddLog("INFO", fmt.Sprintf("Neural Monolith Online. Internal Engine: %s", localSocksAddr))
 
-	// 2. Jalankan loop pembaca TUN
 	engine.wg.Add(1)
 	go engine.readLoop()
 
@@ -153,7 +142,6 @@ func (e *VpnEngine) writeToTun(packet []byte) {
 	}
 }
 
-// startEmbeddedSocks5 menjalankan server SOCKS5 bawaan langsung di dalam Go binary kita.
 func (e *VpnEngine) startEmbeddedSocks5(listenAddr string) {
 	var lc net.ListenConfig
 	l, err := lc.Listen(e.ctx, "tcp4", listenAddr)
@@ -220,7 +208,6 @@ func (e *VpnEngine) handleSocks5Client(client net.Conn) {
 	targetPort := binary.BigEndian.Uint16(portBuf)
 	fullTarget := fmt.Sprintf("%s:%d", targetAddr, targetPort)
 
-	// Dial ke internet global dengan socket yang dilindungi
 	dialer := ProtectedDialer(5)
 	remote, err := dialer.Dial("tcp", fullTarget)
 	if err != nil {
@@ -229,12 +216,10 @@ func (e *VpnEngine) handleSocks5Client(client net.Conn) {
 	}
 	defer remote.Close()
 
-	// Reply Success
 	if _, err := client.Write([]byte{0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0}); err != nil {
 		return
 	}
 
-	// Relay bi-directional
 	var wg sync.WaitGroup
 	wg.Add(2)
 	pipe := func(dst, src net.Conn) {
